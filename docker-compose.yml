@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: tvh-uploader
     ports:
-      - "3000:3000"
+      - "80:80"
     environment:
       # Server-side environment variables (not exposed to browser)
       - NODE_ENV=production
@@ -18,8 +18,8 @@ services:
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s

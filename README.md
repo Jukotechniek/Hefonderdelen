@@ -19,17 +19,19 @@ View your app in AI Studio: https://ai.studio/apps/drive/1qEl_Ecoen0qme3oe4ee9gd
 
 2. Maak een `.env.local` bestand aan in de root directory met de volgende variabelen:
    ```env
-   # Vereist: OpenAI API Key voor AI beschrijvingen
-   VITE_OPENAI_API_KEY=sk-...
+   # Server-side API Keys (veilig, niet geëxposeerd aan browser)
+   OPENAI_API_KEY=sk-...
+   GOOGLE_AI_API_KEY=...
 
+   # Client-side environment variables (geëxposeerd aan browser via NEXT_PUBLIC_*)
    # Optioneel: Supabase (voor auth en foto storage)
    # Als niet geconfigureerd, werkt de app in demo mode
-   VITE_SUPABASE_URL=https://jouw-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJ...
+   NEXT_PUBLIC_SUPABASE_URL=https://jouw-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 
-   # Vereist: Shopify configuratie
-   VITE_SHOPIFY_STORE_URL=https://jouw-winkel.myshopify.com
-   VITE_SHOPIFY_ACCESS_TOKEN=shpat_...
+   # Shopify configuratie (optioneel)
+   NEXT_PUBLIC_SHOPIFY_STORE_URL=https://jouw-winkel.myshopify.com
+   NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN=shpat_...
    ```
 
 3. Start de development server:
@@ -44,12 +46,18 @@ View your app in AI Studio: https://ai.studio/apps/drive/1qEl_Ecoen0qme3oe4ee9gd
 ### OpenAI API Key
 - Ga naar https://platform.openai.com/api-keys
 - Maak een nieuwe API key aan
-- Voeg deze toe aan `.env.local` als `VITE_OPENAI_API_KEY`
+- Voeg deze toe aan `.env.local` als `OPENAI_API_KEY` (server-side, veilig)
+
+### Google AI API Key (alternatief)
+- Ga naar https://ai.google.dev/
+- Maak een nieuwe API key aan
+- Voeg deze toe aan `.env.local` als `GOOGLE_AI_API_KEY` (server-side, veilig)
 
 ### Supabase (Optioneel)
 - Maak een account op https://supabase.com
 - Maak een nieuw project aan
 - Ga naar Settings > API en kopieer de URL en anon key
+- Voeg deze toe aan `.env.local` als `NEXT_PUBLIC_SUPABASE_URL` en `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - Maak een Storage bucket aan genaamd `product-images` met publieke toegang
 
 **Email verificatie uitschakelen (aanbevolen):**
@@ -82,10 +90,10 @@ Je kunt gebruikers direct in de database aanmaken via het Supabase dashboard:
 
 **Stap 2: Voeg Edge Function URL toe aan `.env.local`:**
 ```env
-VITE_SUPABASE_EDGE_FUNCTION_URL=https://jouw-project.supabase.co/functions/v1/shopify-proxy
+NEXT_PUBLIC_SUPABASE_EDGE_FUNCTION_URL=https://jouw-project.supabase.co/functions/v1/shopify-proxy
 ```
 
-Of laat dit leeg - de app gebruikt automatisch: `{VITE_SUPABASE_URL}/functions/v1/shopify-proxy`
+Of laat dit leeg - de app gebruikt automatisch: `{NEXT_PUBLIC_SUPABASE_URL}/functions/v1/shopify-proxy`
 
 **BELANGRIJK - CORS Probleem (OPGELOST):**
 De Shopify Admin API blokkeert directe browser calls vanwege CORS. Je hebt een **Supabase Edge Function** nodig als proxy.
@@ -181,7 +189,74 @@ serve(async (req) => {
 
 6. Deploy: `supabase functions deploy shopify-proxy`
 7. Voeg secrets toe: `supabase secrets set SHOPIFY_STORE_URL=... SHOPIFY_ACCESS_TOKEN=...`
-8. Voeg toe aan `.env.local`: `VITE_SUPABASE_EDGE_FUNCTION_URL=https://jouw-project.supabase.co/functions/v1/shopify-proxy`
+8. Voeg toe aan `.env.local`: `NEXT_PUBLIC_SUPABASE_EDGE_FUNCTION_URL=https://jouw-project.supabase.co/functions/v1/shopify-proxy`
+
+## Docker Deployment
+
+### Build en Run met Docker
+
+1. **Maak een `.env` bestand** met je environment variabelen (zie `.env.example`)
+
+2. **Build de Docker image:**
+   ```bash
+   docker build -t tvh-uploader .
+   ```
+
+3. **Run de container:**
+   ```bash
+   docker run -d -p 3000:3000 --env-file .env --name tvh-uploader tvh-uploader
+   ```
+
+   De app is nu beschikbaar op http://localhost:3000
+
+### Docker Compose (Aanbevolen)
+
+1. **Maak een `.env` bestand** met je environment variabelen
+
+2. **Start met docker-compose:**
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **Stop de container:**
+   ```bash
+   docker-compose down
+   ```
+
+4. **Bekijk logs:**
+   ```bash
+   docker-compose logs -f
+   ```
+
+### Veiligheid - Environment Variabelen
+
+**BELANGRIJK:** Next.js maakt onderscheid tussen server-side en client-side environment variabelen:
+
+- **Server-side** (`OPENAI_API_KEY`, `GOOGLE_AI_API_KEY`): Blijven veilig op de server, worden NIET geëxposeerd aan de browser
+- **Client-side** (`NEXT_PUBLIC_*`): Worden geëxposeerd aan de browser via de JavaScript bundle
+
+API keys voor OpenAI en Google AI worden nu veilig server-side gebruikt via API routes (`/api/ai/openai` en `/api/ai/google`), waardoor ze nooit in de browser terecht komen.
+
+## Veiligheid
+
+### Beveiligingsmaatregelen
+
+1. **API Keys in Frontend:** 
+   - ⚠️ **WAARSCHUWING:** `VITE_*` environment variabelen worden geëxposeerd in de browser
+   - Gebruik Supabase Edge Functions of een backend proxy voor gevoelige API calls
+   - Overweeg rate limiting op API endpoints
+
+2. **Input Validatie:**
+   - Product IDs worden gevalideerd (alleen cijfers)
+   - File uploads worden gevalideerd op type en grootte
+
+3. **CORS:**
+   - Shopify API calls gaan via Supabase Edge Function (proxy)
+   - Directe browser calls worden geblokkeerd door CORS
+
+4. **Security Headers:**
+   - Nginx configuratie bevat security headers
+   - XSS protection, content type sniffing protection, etc.
 
 ## Hoe het werkt
 

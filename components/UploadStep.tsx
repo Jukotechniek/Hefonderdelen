@@ -1,3 +1,4 @@
+'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
 import { 
@@ -14,7 +15,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { UploadedFile } from '../types';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabase';
 
 interface UploadStepProps {
   productId: string;
@@ -207,68 +208,33 @@ const UploadStep: React.FC<UploadStepProps> = ({
     setIsGenerating(true);
     setError(null);
     try {
-      const apiKey = (import.meta.env?.VITE_OPENAI_API_KEY as string) || (process.env?.OPENAI_API_KEY as string);
-      
-      if (!apiKey || apiKey === '' || apiKey === 'sk-...') {
-        setError('⚠️ OpenAI API key niet geconfigureerd. Voeg VITE_OPENAI_API_KEY toe aan je .env bestand.');
-        setIsGenerating(false);
-        return;
-      }
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('/api/ai/openai', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'Je bent een technische schrijver die ruwe productbeschrijvingen transformeert naar professionele productomschrijvingen in het Nederlands voor heftruck- en magazijnwagen onderdelen. Je schrijft in een specifieke stijl die altijd de volgende elementen bevat: 1) Wat het product is en waarvoor het wordt gebruikt, 2) Kwaliteit, duurzaamheid en betrouwbaarheid benadrukken, 3) Voordelen zoals eenvoudige montage en efficiëntie beschrijven, 4) Eindigen met een call-to-action over productiviteit. BELANGRIJK: Gebruik ALLEEN technische details die expliciet in de ruwe beschrijving staan. Verzin GEEN extra afmetingen, maten of specificaties.'
-            },
-            {
-              role: 'user',
-              content: `Transformeer de volgende ruwe productbeschrijving naar een professionele productomschrijving in het Nederlands. De beschrijving MOET altijd de volgende elementen bevatten:
-
-1. Uitleggen wat het product is en waarvoor het wordt gebruikt (bijv. "is een essentieel onderdeel voor het optimaal functioneren van uw heftruck of magazijnwagen")
-2. Kwaliteit, duurzaamheid en betrouwbaarheid benadrukken (bijv. "vervaardigd uit hoogwaardige materialen die zorgen voor duurzaamheid en betrouwbare prestaties, zelfs onder zware werkomstandigheden")
-3. Voordelen beschrijven zoals eenvoudige montage en efficiëntie (bijv. "dankzij het precieze ontwerp en de perfecte pasvorm is dit onderdeel eenvoudig te monteren en draagt het bij aan een soepele en efficiënte werking")
-4. Eindigen met een call-to-action over productiviteit (bijv. "Kies voor dit onderdeel om de productiviteit in uw magazijn te verhogen en ongewenste stilstand te voorkomen")
-
-BELANGRIJK: Gebruik ALLEEN technische details (afmetingen, maten, specificaties zoals diameter, lengte, etc.) die expliciet in de ruwe beschrijving staan. Als er geen technische details in de ruwe beschrijving staan, voeg dan ook geen toe. Verzin GEEN extra gegevens, afmetingen of specificaties die niet in de ruwe beschrijving staan.
-
-Ruwe beschrijving:
-${description}
-
-Schrijf alleen de verbeterde beschrijving in 2-3 korte alinea's (ongeveer 100 woorden totaal), zonder extra uitleg, inleiding of markdown. Alleen de omschrijving zelf.`
-            }
-          ],
-          max_tokens: 150,
-          temperature: 0.7
-        })
+        body: JSON.stringify({ description })
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error?.message || 'Onbekende fout';
+        const errorMessage = errorData.error || 'Onbekende fout';
         
         if (response.status === 401) {
-          setError('❌ OpenAI API key is ongeldig. Controleer je VITE_OPENAI_API_KEY in het .env bestand.');
+          setError('❌ OpenAI API key is ongeldig. Controleer je OPENAI_API_KEY in het .env bestand.');
         } else if (response.status === 429) {
           setError('⏱️ Te veel verzoeken. Wacht even en probeer het opnieuw.');
         } else if (response.status === 500 || response.status >= 502) {
           setError('🔧 OpenAI service is tijdelijk niet beschikbaar. Probeer het later opnieuw.');
         } else {
-          setError(`❌ AI fout: ${errorMessage}. Probeer het handmatig of controleer je API key.`);
+          setError(`❌ AI fout: ${errorMessage}. Probeer het handmatig.`);
         }
         setIsGenerating(false);
         return;
       }
 
       const data = await response.json();
-      const generatedText = data.choices[0]?.message?.content || "";
+      const generatedText = data.text || "";
       
       if (!generatedText || generatedText.trim() === '') {
         setError('⚠️ AI heeft geen tekst gegenereerd. Probeer het opnieuw of schrijf handmatig.');
@@ -282,9 +248,7 @@ Schrijf alleen de verbeterde beschrijving in 2-3 korte alinea's (ongeveer 100 wo
       console.error("AI Generation failed", err);
       
       if (err.message?.includes('fetch') || err.message?.includes('network')) {
-        setError('🌐 Geen internetverbinding of OpenAI service niet bereikbaar. Controleer je internetverbinding.');
-      } else if (err.message?.includes('API key')) {
-        setError('🔑 OpenAI API key probleem. Controleer je VITE_OPENAI_API_KEY in het .env bestand.');
+        setError('🌐 Geen internetverbinding of service niet bereikbaar. Controleer je internetverbinding.');
       } else {
         setError(`❌ AI kon geen tekst genereren: ${err.message || 'Onbekende fout'}. Probeer het handmatig.`);
       }
@@ -366,7 +330,7 @@ Schrijf alleen de verbeterde beschrijving in 2-3 korte alinea's (ongeveer 100 wo
       
       if (images.length > 0) {
         // Check of Supabase Storage is geconfigureerd
-        const supabaseUrl = (import.meta.env?.VITE_SUPABASE_URL as string) || '';
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
         const hasSupabase = supabaseUrl && supabaseUrl !== '' && supabaseUrl !== 'https://placeholder.supabase.co';
         
         if (hasSupabase) {
@@ -397,7 +361,7 @@ Schrijf alleen de verbeterde beschrijving in 2-3 korte alinea's (ongeveer 100 wo
                 if (uploadError.message?.includes('Bucket') || uploadError.message?.includes('not found')) {
                   throw new Error(`Supabase Storage bucket 'product-images' bestaat niet. Maak deze aan in je Supabase dashboard (Storage → Create bucket).`);
                 } else if (uploadError.message?.includes('JWT') || uploadError.message?.includes('auth')) {
-                  throw new Error(`Supabase authenticatie fout. Controleer je VITE_SUPABASE_ANON_KEY in je .env bestand.`);
+                  throw new Error(`Supabase authenticatie fout. Controleer je NEXT_PUBLIC_SUPABASE_ANON_KEY in je .env bestand.`);
                 } else if (uploadError.message?.includes('new row violates') || uploadError.message?.includes('policy')) {
                   throw new Error(`Supabase Storage policy fout. Zorg dat de bucket 'product-images' publieke toegang heeft of dat je RLS policies correct zijn ingesteld.`);
                 } else {
@@ -440,7 +404,7 @@ Schrijf alleen de verbeterde beschrijving in 2-3 korte alinea's (ongeveer 100 wo
         } else {
           // Als Supabase niet is geconfigureerd, gebruik base64 of data URLs (tijdelijk)
           // Dit is niet ideaal maar werkt als fallback
-          throw new Error('Supabase Storage is niet geconfigureerd. Configureer VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY in je .env bestand en maak een bucket genaamd "product-images" aan.');
+          throw new Error('Supabase Storage is niet geconfigureerd. Configureer NEXT_PUBLIC_SUPABASE_URL en NEXT_PUBLIC_SUPABASE_ANON_KEY in je .env bestand en maak een bucket genaamd "product-images" aan.');
         }
       }
 

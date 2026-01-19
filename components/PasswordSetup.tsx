@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabase';
 import { Lock, Loader2, CheckCircle2 } from 'lucide-react';
 
 interface PasswordSetupProps {

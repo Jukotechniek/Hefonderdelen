@@ -5,11 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = (import.meta.env?.VITE_SUPABASE_URL as string) || '';
 const supabaseAnonKey = (import.meta.env?.VITE_SUPABASE_ANON_KEY as string) || '';
 
-console.log('Supabase config:', { 
-  hasUrl: !!supabaseUrl, 
-  hasKey: !!supabaseAnonKey,
-  url: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : 'not set'
-});
+// Logging removed for security - credentials should not be logged
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not configured. Using demo mode.');

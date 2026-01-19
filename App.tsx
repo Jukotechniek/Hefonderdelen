@@ -9,7 +9,7 @@ import { AppState, UploadedFile } from './types';
 import { LogOut, Package } from 'lucide-react';
 
 const App: React.FC = () => {
-  console.log('App component rendering...');
+  // App component rendering
   const [state, setState] = useState<AppState>({
     step: 'auth',
     productId: '',

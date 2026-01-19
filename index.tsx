@@ -3,7 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-console.log('Starting app...');
+// Starting app
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -17,7 +17,7 @@ try {
       <App />
     </React.StrictMode>
   );
-  console.log('App rendered successfully');
+  // App rendered successfully
 } catch (error) {
   console.error('Error rendering app:', error);
   rootElement.innerHTML = `

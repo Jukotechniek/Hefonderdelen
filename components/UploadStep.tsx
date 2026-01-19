@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   Upload, 
   Camera, 
@@ -38,10 +38,172 @@ const UploadStep: React.FC<UploadStepProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDescriptionConfirm, setShowDescriptionConfirm] = useState(false);
+  const [existingDescription, setExistingDescription] = useState<string | null>(null);
+  const [pendingDescription, setPendingDescription] = useState<string>('');
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+  const [existingFilesInfo, setExistingFilesInfo] = useState<{hasPhotos: boolean, hasDescription: boolean, existingPhotos: string[]} | null>(null);
+  const [showExistingDataWarning, setShowExistingDataWarning] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const [existingPhotoFiles, setExistingPhotoFiles] = useState<Array<{url: string, path: string}>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check bij mount of er al foto's en/of beschrijving bestaan
+  React.useEffect(() => {
+    const checkExistingData = async () => {
+      if (!productId) return;
+      
+      const articleNumber = `TVH/${productId}`;
+      
+      // Check database voor beschrijving
+      const { data: productData } = await supabase
+        .from('products')
+        .select('shopify_description')
+        .eq('article_number', articleNumber)
+        .single();
+      
+      const hasDescription = productData?.shopify_description && productData.shopify_description.trim().length > 0;
+      
+      // Laad bestaande beschrijving in textarea als die bestaat
+      if (hasDescription && productData.shopify_description) {
+        onDescriptionChange(productData.shopify_description);
+      }
+      
+      // Check Storage voor foto's
+      const folderPath = `tvh-${productId}/`;
+      const { data: files, error } = await supabase.storage
+        .from('product-images')
+        .list(folderPath, {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        });
+      
+      const existingPhotos: string[] = [];
+      const existingPhotoFilesList: Array<{url: string, path: string}> = [];
+      if (!error && files && files.length > 0) {
+        // Haal publieke URLs op voor bestaande foto's
+        for (const file of files) {
+          if (file.name && (file.name.endsWith('.jpg') || file.name.endsWith('.jpeg') || file.name.endsWith('.png'))) {
+            const filePath = `${folderPath}${file.name}`;
+            const { data: urlData } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(filePath);
+            if (urlData?.publicUrl) {
+              existingPhotos.push(urlData.publicUrl);
+              existingPhotoFilesList.push({ url: urlData.publicUrl, path: filePath });
+            }
+          }
+        }
+      }
+      setExistingPhotoFiles(existingPhotoFilesList);
+      
+      const hasPhotos = existingPhotos.length > 0;
+      
+      if (hasPhotos || hasDescription) {
+        setExistingFilesInfo({
+          hasPhotos,
+          hasDescription: !!hasDescription,
+          existingPhotos
+        });
+        
+        // Als beide bestaan, toon waarschuwing
+        if (hasPhotos && hasDescription) {
+          setShowExistingDataWarning(true);
+        }
+        
+        // Als alleen foto's bestaan, laad ze in en maak upload disabled
+        if (hasPhotos && !hasDescription) {
+          // Converteer URLs naar UploadedFile format (voor preview)
+          // We kunnen de foto's niet echt als File objecten maken, maar we kunnen ze wel tonen
+          // Voor nu: toon melding dat gebruiker alleen beschrijving kan toevoegen
+        }
+      }
+    };
+    
+    checkExistingData();
+  }, [productId]);
+
+  const saveDescription = async (desc: string, existingProduct: any) => {
+    try {
+      const articleNumber = `TVH/${productId}`;
+      
+      if (existingProduct) {
+        // Update bestaand product
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({ 
+            shopify_description: desc,
+            updated_at: new Date().toISOString()
+          })
+          .eq('article_number', articleNumber);
+
+        if (updateError) {
+          throw new Error(`Fout bij updaten van product: ${updateError.message}`);
+        }
+        console.log('Beschrijving bijgewerkt voor product:', productId);
+      } else {
+        // Maak nieuw product aan
+        const { error: insertError } = await supabase
+          .from('products')
+          .insert({
+            article_number: articleNumber,
+            product_name: `TVH ${productId}`, // Verplicht veld
+            shopify_description: desc
+          });
+
+        if (insertError) {
+          throw new Error(`Fout bij aanmaken van product: ${insertError.message}`);
+        }
+        console.log('Nieuw product aangemaakt met beschrijving:', productId);
+      }
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
+  const handleConfirmOverwrite = async () => {
+    setIsUploading(true);
+    setShowDescriptionConfirm(false);
+    try {
+      const articleNumber = `TVH/${productId}`;
+      const { data: existingProduct } = await supabase
+        .from('products')
+        .select('id, article_number')
+        .eq('article_number', articleNumber)
+        .single();
+
+      await saveDescription(pendingDescription, existingProduct);
+      
+      // Ga door met success
+      if (uploadedUrls.length > 0 || images.length === 0) {
+        onSuccess();
+      } else {
+        throw new Error('Geen foto\'s geüpload');
+      }
+    } catch (err: any) {
+      console.error('Error saving description:', err);
+      setError(`Fout bij opslaan van beschrijving: ${err.message}`);
+      setIsUploading(false);
+    }
+  };
+
+  const handleCancelOverwrite = () => {
+    setShowDescriptionConfirm(false);
+    setExistingDescription(null);
+    setPendingDescription('');
+    setIsUploading(false);
+    // Stop hier - gebruiker wil terug om tekst aan te passen
+    // Foto's zijn al geüpload, maar beschrijving wordt niet opgeslagen
+  };
 
   const handleAiHelp = async () => {
     if (isGenerating) return;
+    
+    if (!description || description.trim() === '') {
+      setError('⚠️ Voer eerst een beschrijving in voordat je AI hulp gebruikt.');
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     try {
@@ -64,14 +226,26 @@ const UploadStep: React.FC<UploadStepProps> = ({
           messages: [
             {
               role: 'system',
-              content: 'Je bent een technische schrijver die korte, krachtige productomschrijvingen schrijft in het Nederlands.'
+              content: 'Je bent een technische schrijver die ruwe productbeschrijvingen transformeert naar professionele productomschrijvingen in het Nederlands voor heftruck- en magazijnwagen onderdelen. Je schrijft in een specifieke stijl die altijd de volgende elementen bevat: 1) Wat het product is en waarvoor het wordt gebruikt, 2) Kwaliteit, duurzaamheid en betrouwbaarheid benadrukken, 3) Voordelen zoals eenvoudige montage en efficiëntie beschrijven, 4) Eindigen met een call-to-action over productiviteit. BELANGRIJK: Gebruik ALLEEN technische details die expliciet in de ruwe beschrijving staan. Verzin GEEN extra afmetingen, maten of specificaties.'
             },
             {
               role: 'user',
-              content: `Schrijf een zeer korte, krachtige en professionele technische productomschrijving in het Nederlands voor een onderdeel met ID tvh/${productId}. Focus op kwaliteit en industrieel gebruik. Geen markdown, geen inleiding, alleen de omschrijving zelf.`
+              content: `Transformeer de volgende ruwe productbeschrijving naar een professionele productomschrijving in het Nederlands. De beschrijving MOET altijd de volgende elementen bevatten:
+
+1. Uitleggen wat het product is en waarvoor het wordt gebruikt (bijv. "is een essentieel onderdeel voor het optimaal functioneren van uw heftruck of magazijnwagen")
+2. Kwaliteit, duurzaamheid en betrouwbaarheid benadrukken (bijv. "vervaardigd uit hoogwaardige materialen die zorgen voor duurzaamheid en betrouwbare prestaties, zelfs onder zware werkomstandigheden")
+3. Voordelen beschrijven zoals eenvoudige montage en efficiëntie (bijv. "dankzij het precieze ontwerp en de perfecte pasvorm is dit onderdeel eenvoudig te monteren en draagt het bij aan een soepele en efficiënte werking")
+4. Eindigen met een call-to-action over productiviteit (bijv. "Kies voor dit onderdeel om de productiviteit in uw magazijn te verhogen en ongewenste stilstand te voorkomen")
+
+BELANGRIJK: Gebruik ALLEEN technische details (afmetingen, maten, specificaties zoals diameter, lengte, etc.) die expliciet in de ruwe beschrijving staan. Als er geen technische details in de ruwe beschrijving staan, voeg dan ook geen toe. Verzin GEEN extra gegevens, afmetingen of specificaties die niet in de ruwe beschrijving staan.
+
+Ruwe beschrijving:
+${description}
+
+Schrijf alleen de verbeterde beschrijving in 2-3 korte alinea's (ongeveer 100 woorden totaal), zonder extra uitleg, inleiding of markdown. Alleen de omschrijving zelf.`
             }
           ],
-          max_tokens: 200,
+          max_tokens: 150,
           temperature: 0.7
         })
       });
@@ -132,16 +306,55 @@ const UploadStep: React.FC<UploadStepProps> = ({
   };
 
   const removeImage = (id: string) => {
+    if (!window.confirm('Weet je zeker dat je deze foto wilt verwijderen?')) {
+      return;
+    }
     const imgToRemove = images.find(img => img.id === id);
     if (imgToRemove) URL.revokeObjectURL(imgToRemove.preview);
     onImagesChange(images.filter(img => img.id !== id));
   };
 
-  const handleSave = async () => {
-    if (images.length === 0 && !description.trim()) {
-      setError("Voeg minimaal foto's of een omschrijving toe.");
+  const removeExistingPhoto = async (photoPath: string, index: number) => {
+    if (!window.confirm('Weet je zeker dat je deze foto wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.')) {
       return;
     }
+    try {
+      const { error } = await supabase.storage
+        .from('product-images')
+        .remove([photoPath]);
+
+      if (error) {
+        console.error('Error removing photo:', error);
+        setError(`Fout bij verwijderen van foto: ${error.message}`);
+        return;
+      }
+
+      // Update state
+      const updatedPhotos = existingPhotoFiles.filter((_, i) => i !== index);
+      setExistingPhotoFiles(updatedPhotos);
+      
+      if (existingFilesInfo) {
+        setExistingFilesInfo({
+          ...existingFilesInfo,
+          hasPhotos: updatedPhotos.length > 0,
+          existingPhotos: updatedPhotos.map(p => p.url)
+        });
+      }
+    } catch (err: any) {
+      console.error('Error removing existing photo:', err);
+      setError(`Fout bij verwijderen van foto: ${err.message}`);
+    }
+  };
+
+  const handleSave = async () => {
+    // Check of er foto's zijn (bestaand of nieuw)
+    const totalPhotos = existingPhotoFiles.length + images.length;
+    
+    if (totalPhotos === 0) {
+      setError("Foto's zijn verplicht. Voeg minimaal één foto toe voordat je kunt opslaan.");
+      return;
+    }
+    
     setIsUploading(true);
     setError(null);
     
@@ -163,9 +376,11 @@ const UploadStep: React.FC<UploadStepProps> = ({
             let uploadSuccess = false;
             
             try {
-              // Upload naar tvh{productId}/ met bestandsnamen {productId}-1.jpg, {productId}-2.jpg, etc.
+              // Upload naar tvh-{productId}/ met bestandsnamen {productId}-{nummer}.jpg
+              // Nummering: start vanaf aantal bestaande foto's + 1
               const fileExt = img.file.name.split('.').pop() || 'jpg';
-              const imageNumber = images.indexOf(img) + 1;
+              const startNumber = existingPhotoFiles.length + 1;
+              const imageNumber = images.indexOf(img) + startNumber;
               fileName = `tvh-${productId}/tvh-${productId}-${imageNumber}.${fileExt}`;
               
               const { data: uploadData, error: uploadError } = await supabase.storage
@@ -229,7 +444,43 @@ const UploadStep: React.FC<UploadStepProps> = ({
         }
       }
 
+      // Opslaan van beschrijving in database (als ingevuld)
+      if (description && description.trim().length > 0) {
+        try {
+          const articleNumber = `TVH/${productId}`;
+          
+          // Check of product al bestaat en of er al een shopify_description is
+          const { data: existingProduct, error: searchError } = await supabase
+            .from('products')
+            .select('id, article_number, shopify_description')
+            .eq('article_number', articleNumber)
+            .single();
+
+          if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = not found
+            console.error('Error searching for product:', searchError);
+            throw new Error(`Fout bij zoeken naar product: ${searchError.message}`);
+          }
+
+          // Als product bestaat en heeft al een shopify_description, vraag bevestiging
+          if (existingProduct && existingProduct.shopify_description && existingProduct.shopify_description.trim().length > 0) {
+            setUploadedUrls(uploadedUrls); // Sla URLs op voor later gebruik
+            setExistingDescription(existingProduct.shopify_description);
+            setPendingDescription(description.trim());
+            setShowDescriptionConfirm(true);
+            setIsUploading(false);
+            return; // Stop hier en wacht op bevestiging
+          }
+
+          // Geen bestaande beschrijving, sla direct op
+          await saveDescription(description.trim(), existingProduct);
+        } catch (dbError: any) {
+          console.error('Database error:', dbError);
+          throw new Error(`Fout bij opslaan van beschrijving: ${dbError.message}`);
+        }
+      }
+
       // Alles is opgeslagen in Supabase Storage
+      setUploadedUrls(uploadedUrls);
       if (uploadedUrls.length > 0 || images.length === 0) {
         onSuccess();
       } else {
@@ -260,7 +511,107 @@ const UploadStep: React.FC<UploadStepProps> = ({
   };
 
   return (
-    <div className="max-w-5xl w-full mx-auto p-4 sm:p-8">
+    <>
+      {/* Waarschuwing als beide al bestaan */}
+      {showExistingDataWarning && existingFilesInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div className="p-6 sm:p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800">Product bestaat al</h3>
+              </div>
+              <p className="text-slate-600 mb-6">
+                Dit product heeft al foto's en een beschrijving. Het is niet nodig om deze opnieuw toe te voegen.
+              </p>
+              
+              <div className="bg-slate-50 rounded-lg p-4 mb-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-green-600" />
+                    <span className="text-sm text-slate-700">Foto's: {existingFilesInfo.existingPhotos.length} foto(s) aanwezig</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-green-600" />
+                    <span className="text-sm text-slate-700">Beschrijving: Aanwezig</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowExistingDataWarning(false);
+                    onBack();
+                  }}
+                  className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition-colors"
+                >
+                  Terug
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExistingDataWarning(false);
+                    // Laat gebruiker doorgaan om beschrijving te bewerken
+                  }}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                >
+                  Toch bewerken
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bevestigingsdialoog voor overschrijven beschrijving */}
+      {showDescriptionConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 sm:p-8">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">Bestaande beschrijving gevonden</h3>
+              <p className="text-slate-600 mb-6">
+                Er bestaat al een shopify_description voor dit product. Wil je deze overschrijven?
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="border border-slate-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-slate-700 mb-2 text-sm uppercase tracking-wide">Bestaande beschrijving</h4>
+                  <div className="bg-slate-50 rounded p-3 text-sm text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                    {existingDescription || '(Leeg)'}
+                  </div>
+                </div>
+                <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/30">
+                  <h4 className="font-semibold text-blue-700 mb-2 text-sm uppercase tracking-wide">Nieuwe beschrijving</h4>
+                  <div className="bg-white rounded p-3 text-sm text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                    {pendingDescription}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleCancelOverwrite}
+                  className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition-colors"
+                >
+                  Annuleren
+                </button>
+                <button
+                  onClick={handleConfirmOverwrite}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                >
+                  Overschrijven
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-5xl w-full mx-auto p-4 sm:p-8">
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header Section */}
         <div className="p-6 sm:p-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50">
@@ -285,11 +636,11 @@ const UploadStep: React.FC<UploadStepProps> = ({
           <div className="flex gap-3 w-full sm:w-auto">
              <button
               onClick={handleSave}
-              disabled={isUploading || (images.length === 0 && !description.trim())}
+              disabled={isUploading || (images.length === 0 && !existingFilesInfo?.hasPhotos)}
               className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200"
             >
               {isUploading ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-              {isUploading ? "Verzenden..." : "Opslaan"}
+              {isUploading ? "Verzenden..." : existingFilesInfo?.hasPhotos && !existingFilesInfo.hasDescription ? "Beschrijving opslaan" : "Opslaan"}
             </button>
           </div>
         </div>
@@ -336,7 +687,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
                 <ImageIcon size={16} className="text-blue-500" />
-                Foto's ({images.length})
+                Foto's ({existingPhotoFiles.length + images.length})
               </label>
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -356,7 +707,85 @@ const UploadStep: React.FC<UploadStepProps> = ({
               className="hidden"
             />
 
-            {images.length === 0 ? (
+            {/* Toon alle foto's: bestaande + nieuwe */}
+            {(existingPhotoFiles.length > 0 || images.length > 0) ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                {/* Bestaande foto's */}
+                {existingPhotoFiles.map((photo, index) => (
+                  <div 
+                    key={`existing-${index}`} 
+                    className="relative aspect-square group rounded-xl overflow-hidden border border-slate-100 shadow-sm bg-slate-100 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('Foto geklikt, index:', index);
+                      setSelectedPhotoIndex(index);
+                    }}
+                  >
+                    <img 
+                      src={photo.url} 
+                      alt={`Bestaande foto ${index + 1}`} 
+                      className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+                    />
+                    <div 
+                      className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none"
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeExistingPhoto(photo.path, index);
+                        }}
+                        className="p-2 bg-white text-red-500 rounded-full hover:bg-red-50 transition-colors shadow-lg pointer-events-auto"
+                        title="Verwijderen"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Nieuwe foto's */}
+                {images.map((img, imgIndex) => (
+                  <div 
+                    key={img.id} 
+                    className="relative aspect-square group rounded-xl overflow-hidden border border-slate-100 shadow-sm bg-slate-100 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('Nieuwe foto geklikt, index:', existingPhotoFiles.length + imgIndex);
+                      setSelectedPhotoIndex(existingPhotoFiles.length + imgIndex);
+                    }}
+                  >
+                    <img 
+                      src={img.preview} 
+                      alt="Preview" 
+                      className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+                    />
+                    <div 
+                      className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none"
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeImage(img.id);
+                        }}
+                        className="p-2 bg-white text-red-500 rounded-full hover:bg-red-50 transition-colors shadow-lg pointer-events-auto"
+                        title="Verwijderen"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Toevoegen knop */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all"
+                >
+                  <Upload size={20} />
+                  <span className="text-[10px] font-bold uppercase">Meer</span>
+                </button>
+              </div>
+            ) : (
               <div 
                 onClick={() => fileInputRef.current?.click()}
                 className="h-64 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-4 hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer group bg-slate-50/50"
@@ -369,35 +798,44 @@ const UploadStep: React.FC<UploadStepProps> = ({
                   <p className="text-slate-400 text-xs mt-1">Klik om te uploaden</p>
                 </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-                {images.map((img) => (
-                  <div key={img.id} className="relative aspect-square group rounded-xl overflow-hidden border border-slate-100 shadow-sm bg-slate-100">
-                    <img src={img.preview} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button
-                        onClick={() => removeImage(img.id)}
-                        className="p-2 bg-white text-red-500 rounded-full hover:bg-red-50 transition-colors shadow-lg"
-                        title="Verwijderen"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            )}
+            
+            {/* Lightbox voor foto weergave */}
+            {selectedPhotoIndex !== null && (
+              <div 
+                className="fixed inset-0 bg-black/90 flex items-center justify-center z-[9999] p-4"
+                onClick={() => setSelectedPhotoIndex(null)}
+              >
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all"
+                  onClick={() => setSelectedPhotoIndex(null)}
+                  className="absolute top-4 right-4 text-white hover:text-gray-300 p-2 z-10"
                 >
-                  <Upload size={20} />
-                  <span className="text-[10px] font-bold uppercase">Meer</span>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
+                {selectedPhotoIndex < existingPhotoFiles.length ? (
+                  <img 
+                    src={existingPhotoFiles[selectedPhotoIndex].url}
+                    alt="Grote weergave"
+                    className="max-w-full max-h-full object-contain"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <img 
+                    src={images[selectedPhotoIndex - existingPhotoFiles.length]?.preview}
+                    alt="Grote weergave"
+                    className="max-w-full max-h-full object-contain"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
     </div>
+    </>
   );
 };
 

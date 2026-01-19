@@ -14,8 +14,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { UploadedFile } from '../types';
-import { shopifyService } from '../services/shopifyService';
-import { GoogleGenAI } from "@google/genai";
+import { supabase } from '../supabaseClient';
 
 interface UploadStepProps {
   productId: string;
@@ -46,17 +45,75 @@ const UploadStep: React.FC<UploadStepProps> = ({
     setIsGenerating(true);
     setError(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Schrijf een zeer korte, krachtige en professionele technische productomschrijving in het Nederlands voor een onderdeel met ID tvh/${productId}. Focus op kwaliteit en industrieel gebruik. Geen markdown, geen inleiding, alleen de omschrijving zelf.`,
-      });
+      const apiKey = (import.meta.env?.VITE_OPENAI_API_KEY as string) || (process.env?.OPENAI_API_KEY as string);
       
-      const generatedText = response.text || "";
+      if (!apiKey || apiKey === '' || apiKey === 'sk-...') {
+        setError('⚠️ OpenAI API key niet geconfigureerd. Voeg VITE_OPENAI_API_KEY toe aan je .env bestand.');
+        setIsGenerating(false);
+        return;
+      }
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'Je bent een technische schrijver die korte, krachtige productomschrijvingen schrijft in het Nederlands.'
+            },
+            {
+              role: 'user',
+              content: `Schrijf een zeer korte, krachtige en professionele technische productomschrijving in het Nederlands voor een onderdeel met ID tvh/${productId}. Focus op kwaliteit en industrieel gebruik. Geen markdown, geen inleiding, alleen de omschrijving zelf.`
+            }
+          ],
+          max_tokens: 200,
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || 'Onbekende fout';
+        
+        if (response.status === 401) {
+          setError('❌ OpenAI API key is ongeldig. Controleer je VITE_OPENAI_API_KEY in het .env bestand.');
+        } else if (response.status === 429) {
+          setError('⏱️ Te veel verzoeken. Wacht even en probeer het opnieuw.');
+        } else if (response.status === 500 || response.status >= 502) {
+          setError('🔧 OpenAI service is tijdelijk niet beschikbaar. Probeer het later opnieuw.');
+        } else {
+          setError(`❌ AI fout: ${errorMessage}. Probeer het handmatig of controleer je API key.`);
+        }
+        setIsGenerating(false);
+        return;
+      }
+
+      const data = await response.json();
+      const generatedText = data.choices[0]?.message?.content || "";
+      
+      if (!generatedText || generatedText.trim() === '') {
+        setError('⚠️ AI heeft geen tekst gegenereerd. Probeer het opnieuw of schrijf handmatig.');
+        setIsGenerating(false);
+        return;
+      }
+      
       onDescriptionChange(generatedText.trim());
-    } catch (err) {
+      setError(null); // Clear any previous errors on success
+    } catch (err: any) {
       console.error("AI Generation failed", err);
-      setError("AI kon geen tekst genereren. Probeer het handmatig.");
+      
+      if (err.message?.includes('fetch') || err.message?.includes('network')) {
+        setError('🌐 Geen internetverbinding of OpenAI service niet bereikbaar. Controleer je internetverbinding.');
+      } else if (err.message?.includes('API key')) {
+        setError('🔑 OpenAI API key probleem. Controleer je VITE_OPENAI_API_KEY in het .env bestand.');
+      } else {
+        setError(`❌ AI kon geen tekst genereren: ${err.message || 'Onbekende fout'}. Probeer het handmatig.`);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -87,15 +144,116 @@ const UploadStep: React.FC<UploadStepProps> = ({
     }
     setIsUploading(true);
     setError(null);
+    
+    // Declareer uploadedUrls buiten try block zodat het beschikbaar is in catch
+    const uploadedUrls: string[] = [];
+    
     try {
-      const result = await shopifyService.uploadToShopify(productId, images, description);
-      if (result.success) {
+      // Eerst uploaden naar Supabase Storage
+      
+      if (images.length > 0) {
+        // Check of Supabase Storage is geconfigureerd
+        const supabaseUrl = (import.meta.env?.VITE_SUPABASE_URL as string) || '';
+        const hasSupabase = supabaseUrl && supabaseUrl !== '' && supabaseUrl !== 'https://placeholder.supabase.co';
+        
+        if (hasSupabase) {
+          // Probeer te uploaden naar Supabase Storage
+          for (const img of images) {
+            let fileName = '';
+            let uploadSuccess = false;
+            
+            try {
+              // Upload naar tvh{productId}/ met bestandsnamen {productId}-1.jpg, {productId}-2.jpg, etc.
+              const fileExt = img.file.name.split('.').pop() || 'jpg';
+              const imageNumber = images.indexOf(img) + 1;
+              fileName = `tvh-${productId}/tvh-${productId}-${imageNumber}.${fileExt}`;
+              
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('product-images')
+                .upload(fileName, img.file, {
+                  cacheControl: '3600',
+                  upsert: true // Overschrijf als bestand al bestaat
+                });
+
+              if (uploadError) {
+                console.error('Upload error:', uploadError);
+                
+                // Specifieke foutmeldingen
+                if (uploadError.message?.includes('Bucket') || uploadError.message?.includes('not found')) {
+                  throw new Error(`Supabase Storage bucket 'product-images' bestaat niet. Maak deze aan in je Supabase dashboard (Storage → Create bucket).`);
+                } else if (uploadError.message?.includes('JWT') || uploadError.message?.includes('auth')) {
+                  throw new Error(`Supabase authenticatie fout. Controleer je VITE_SUPABASE_ANON_KEY in je .env bestand.`);
+                } else if (uploadError.message?.includes('new row violates') || uploadError.message?.includes('policy')) {
+                  throw new Error(`Supabase Storage policy fout. Zorg dat de bucket 'product-images' publieke toegang heeft of dat je RLS policies correct zijn ingesteld.`);
+                } else {
+                  throw new Error(`Foto upload mislukt: ${uploadError.message || 'Onbekende fout'}`);
+                }
+              }
+
+              uploadSuccess = true;
+
+              // Haal publieke URL op
+              const { data: urlData } = supabase.storage
+                .from('product-images')
+                .getPublicUrl(fileName);
+
+              // getPublicUrl geeft altijd een object terug, check of de URL geldig is
+              const publicUrl = urlData?.publicUrl || '';
+              if (publicUrl && publicUrl.length > 0) {
+                uploadedUrls.push(publicUrl);
+                console.log(`Foto geüpload: ${fileName} -> ${publicUrl}`);
+              } else {
+                // Als er geen publieke URL is, gebruik de path om een URL te construeren
+                const constructedUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${fileName}`;
+                uploadedUrls.push(constructedUrl);
+                console.log(`Gebruik geconstrueerde URL: ${constructedUrl}`);
+              }
+            } catch (imgError: any) {
+              // Log de fout maar gooi alleen door als het echt een kritieke fout is
+              console.error(`Fout bij uploaden van ${img.file.name}:`, imgError);
+              // Als de upload succesvol was maar alleen de URL ophalen faalde, probeer door te gaan
+              if (uploadSuccess && imgError.message?.includes('publieke URL') && fileName) {
+                // Upload was succesvol, gebruik geconstrueerde URL
+                const constructedUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${fileName}`;
+                uploadedUrls.push(constructedUrl);
+                console.warn(`Gebruik geconstrueerde URL als fallback: ${constructedUrl}`);
+              } else {
+                throw new Error(`Fout bij uploaden van ${img.file.name}: ${imgError.message}`);
+              }
+            }
+          }
+        } else {
+          // Als Supabase niet is geconfigureerd, gebruik base64 of data URLs (tijdelijk)
+          // Dit is niet ideaal maar werkt als fallback
+          throw new Error('Supabase Storage is niet geconfigureerd. Configureer VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY in je .env bestand en maak een bucket genaamd "product-images" aan.');
+        }
+      }
+
+      // Alles is opgeslagen in Supabase Storage
+      if (uploadedUrls.length > 0 || images.length === 0) {
         onSuccess();
       } else {
-        throw new Error(result.message);
+        throw new Error('Geen foto\'s geüpload');
       }
     } catch (err: any) {
-      setError(err.message || 'Er is iets fout gegaan bij het opslaan.');
+      console.error('Save error:', err);
+      
+      // Betere error messages met meer details
+      let errorMessage = err.message || 'Er is iets fout gegaan bij het opslaan.';
+      
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.name === 'TypeError') {
+        if (err.message?.includes('Supabase') || err.stack?.includes('supabase')) {
+          errorMessage = 'Supabase Storage fout: Controleer of de bucket "product-images" bestaat en of je Supabase credentials correct zijn.';
+        } else {
+          errorMessage = 'Netwerkfout: Controleer je internetverbinding. Als het probleem aanhoudt, controleer de browser console (F12) voor meer details.';
+        }
+      } else if (err.message?.includes('bucket') || err.message?.includes('Bucket')) {
+        errorMessage = err.message; // Gebruik de specifieke bucket foutmelding
+      } else if (err.message?.includes('authenticatie') || err.message?.includes('auth') || err.message?.includes('JWT')) {
+        errorMessage = err.message; // Gebruik de specifieke auth foutmelding
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsUploading(false);
     }
@@ -161,7 +319,12 @@ const UploadStep: React.FC<UploadStepProps> = ({
               placeholder="Schrijf hier een omschrijving of gebruik AI hulp..."
             />
             {error && (
-              <p className="text-xs text-red-500 font-medium">{error}</p>
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-sm text-red-700 font-medium flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5">⚠️</span>
+                  <span>{error}</span>
+                </p>
+              </div>
             )}
             <p className="text-[11px] text-slate-400 italic">
               Tip: AI genereert omschrijvingen op basis van het productnummer.

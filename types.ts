@@ -6,7 +6,7 @@ export interface UploadedFile {
 }
 
 export interface AppState {
-  step: 'auth' | 'input' | 'details' | 'success';
+  step: 'auth' | 'input' | 'details' | 'success' | 'password-setup';
   productId: string;
   description: string;
   images: UploadedFile[];

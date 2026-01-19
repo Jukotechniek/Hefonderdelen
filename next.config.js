@@ -7,8 +7,6 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '10mb',
     },
-    // Allow cross-origin requests from local network in development
-    allowedDevOrigins: ['192.168.68.118', 'localhost'],
   },
   // Allow cross-origin requests in development
   async headers() {

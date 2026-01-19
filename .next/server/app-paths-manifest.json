@@ -1,3 +1,8 @@
 {
+  "/api/ai/openai/route": "app/api/ai/openai/route.js",
+  "/api/ai/google/route": "app/api/ai/google/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/health/route": "app/api/health/route.js",
+  "/manifest.webmanifest/route": "app/manifest.webmanifest/route.js",
   "/page": "app/page.js"
 }

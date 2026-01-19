@@ -20,7 +20,7 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 # Don't run as root
 RUN addgroup --system --gid 1001 nodejs
@@ -36,8 +36,8 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 # Final stage - Nginx with Next.js
 FROM nginx:alpine

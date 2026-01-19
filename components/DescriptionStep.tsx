@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ArrowRight, ArrowLeft, Sparkles, Loader2, AlignLeft } from 'lucide-react';
 
@@ -21,7 +20,7 @@ const DescriptionStep: React.FC<DescriptionStepProps> = ({ productId, value, onC
 
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/ai/google', {
+      const response = await fetch('/api/ai/openai', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -80,18 +80,23 @@ export default function Home() {
           const isInvited = hasInviteToken || 
                            user.app_metadata?.invited_at || 
                            user.user_metadata?.invited === true ||
-                           (isRecentUser && _event === 'SIGNED_IN' && !user.user_metadata?.password_set);
-          
-          if (isInvited && _event === 'SIGNED_IN') {
-            // Forceer wachtwoord setup voor invited users
+                           (isRecentUser && !user.user_metadata?.password_set);
+
+          // Als de gebruiker een invite heeft en nog geen wachtwoord heeft gezet,
+          // forceer dan ALTIJD de password-setup, ongeacht het event type.
+          if (isInvited && !user.user_metadata?.password_set) {
             setNeedsPasswordSetup(true);
             setState(prev => ({ ...prev, user: session.user, step: 'password-setup' }));
-            // Clear URL parameters
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } else {
-            setNeedsPasswordSetup(false);
-            setState(prev => ({ ...prev, user: session.user, step: 'input' }));
+            if (_event === 'SIGNED_IN') {
+              // Clear URL parameters alleen bij eerste sign-in
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            return;
           }
+
+          // Geen invite meer of wachtwoord al ingesteld -> normale flow
+          setNeedsPasswordSetup(false);
+          setState(prev => ({ ...prev, user: session.user, step: 'input' }));
         } else {
           setNeedsPasswordSetup(false);
           setState(prev => ({ ...prev, user: null, step: 'auth' }));

@@ -2,8 +2,8 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'TVH Foto Upload',
-    short_name: 'TVH Upload',
+    name: 'Upload',
+    short_name: 'Upload',
     description: 'Upload product foto\'s en beschrijvingen',
     start_url: '/',
     display: 'standalone',

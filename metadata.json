@@ -1,6 +1,6 @@
 {
-  "name": "TVH Shopify Uploader",
-  "description": "An internal tool to log product IDs with prefix tvh/ and upload associated photos directly to Shopify.",
+  "name": "Uploader",
+  "description": "An internal tool.",
   "requestFramePermissions": [
     "camera"
   ]

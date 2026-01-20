@@ -105,7 +105,7 @@ export default function Home() {
         <div className="bg-blue-600 p-2 rounded-lg text-white">
           <Package size={20} />
         </div>
-        <h1 className="font-bold text-lg text-slate-800 tracking-tight">TVH <span className="text-blue-600">Foto Upload</span></h1>
+        <h1 className="font-bold text-lg text-slate-800 tracking-tight">Hefonderdelen <span className="text-blue-600">Foto Upload</span></h1>
       </div>
       <div className="flex items-center gap-4">
         <span className="text-sm text-slate-500 hidden sm:inline">{state.user?.email}</span>
@@ -167,7 +167,7 @@ export default function Home() {
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Gelukt!</h2>
-            <p className="text-slate-500 mb-8">Het product <span className="font-semibold text-slate-800">tvh/{state.productId}</span> is succesvol opgeslagen in Supabase Storage.</p>
+            <p className="text-slate-500 mb-8">Het product <span className="font-semibold text-slate-800">tvh/{state.productId}</span> is succesvol opgeslagen.</p>
             <button
               onClick={() => setState({ ...state, step: 'input', productId: '', description: '', images: [] })}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition-all"

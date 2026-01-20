@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'TVH Foto Upload',
+  title: 'Foto Upload',
   description: 'Upload product foto\'s en beschrijvingen',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'TVH Upload',
+    title: 'Upload',
   },
   formatDetection: {
     telephone: false,

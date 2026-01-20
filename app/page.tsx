@@ -24,10 +24,22 @@ export default function Home() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     
     if (typeof window !== 'undefined' && supabaseUrl && supabaseUrl !== '' && supabaseUrl !== 'https://placeholder.supabase.co' && !supabaseUrl.includes('placeholder')) {
-      // Check URL voor invite token (eenmalig bovenaan)
-      const urlParams = new URLSearchParams(window.location.search);
-      const hasInviteToken = urlParams.has('token') || urlParams.has('invite_token') || 
-                            window.location.hash.includes('access_token') && urlParams.has('type') && urlParams.get('type') === 'invite';
+      // Detecteer Supabase invite links (type=invite) – ondersteunt token, token_hash en hash-params
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashString = window.location.hash.startsWith('#')
+        ? window.location.hash.slice(1)
+        : window.location.hash;
+      const hashParams = new URLSearchParams(hashString);
+
+      const isInviteType =
+        searchParams.get('type') === 'invite' ||
+        hashParams.get('type') === 'invite';
+
+      const hasInviteToken =
+        isInviteType ||
+        searchParams.has('invite_token') ||
+        searchParams.has('token') ||
+        searchParams.has('token_hash');
 
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {

@@ -3,9 +3,6 @@ npm-debug.log
 dist
 .git
 .gitignore
-.env
-.env.local
-.env.*.local
 *.log
 .DS_Store
 .vscode

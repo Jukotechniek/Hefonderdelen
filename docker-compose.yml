@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tvh-uploader
+    container_name: uploader
     ports:
       - "3001:3000"
     environment:

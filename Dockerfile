@@ -39,14 +39,3 @@ EXPOSE 3000
 
 # Start Next.js directly
 CMD ["node", "server.js"]
-
-{
-  "cells": [],
-  "metadata": {
-    "language_info": {
-      "name": "python"
-    }
-  },
-  "nbformat": 4,
-  "nbformat_minor": 2
-}

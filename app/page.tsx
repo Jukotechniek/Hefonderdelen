@@ -49,9 +49,9 @@ export default function Home() {
           }
         }
       }).catch((err) => {
-        console.warn('Supabase session check failed, using demo mode:', err);
-        // Auto login in demo mode als Supabase faalt
-        setState(prev => ({ ...prev, user: { email: 'demo@tvh.com', id: 'demo-user-123' }, step: 'input' }));
+        console.error('Supabase session check failed:', err);
+        // Blijf op auth scherm als Supabase faalt
+        setState(prev => ({ ...prev, user: null, step: 'auth' }));
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -88,9 +88,9 @@ export default function Home() {
 
       return () => subscription.unsubscribe();
     } else {
-      // Demo mode - auto login
-      console.log('Supabase niet geconfigureerd, demo mode actief');
-      setState(prev => ({ ...prev, user: { email: 'demo@tvh.com', id: 'demo-user-123' }, step: 'input' }));
+      // Supabase niet geconfigureerd - blijf op auth scherm
+      console.warn('Supabase niet geconfigureerd. Configureer NEXT_PUBLIC_SUPABASE_URL en NEXT_PUBLIC_SUPABASE_ANON_KEY in je .env bestand.');
+      setState(prev => ({ ...prev, user: null, step: 'auth' }));
     }
   }, []);
 

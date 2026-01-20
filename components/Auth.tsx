@@ -43,7 +43,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     <div className="max-w-md w-full mx-auto p-8 bg-white rounded-2xl shadow-xl border border-slate-100">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-slate-800">Welkom</h2>
-        <p className="text-slate-500 mt-2">Log in om productfoto's op te slaan</p>
+        <p className="text-slate-500 mt-2">Log in</p>
       </div>
 
       <form onSubmit={handleAuth} className="space-y-4">

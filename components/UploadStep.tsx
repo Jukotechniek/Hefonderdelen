@@ -642,7 +642,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
               </div>
             )}
             <p className="text-[11px] text-slate-400 italic">
-              Tip: AI genereert omschrijvingen op basis van het productnummer.
+              Tip: AI genereert omschrijvingen op basis van tekst die in het veld staat dus stop hier specificaties in.
             </p>
           </div>
 

@@ -576,7 +576,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
       )}
 
       <div className="max-w-5xl w-full mx-auto p-4 sm:p-8">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="relative bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header Section */}
         <div className="p-6 sm:p-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50">
           <div>
@@ -647,15 +647,16 @@ const UploadStep: React.FC<UploadStepProps> = ({
           </div>
 
           {/* Right: Upload Section */}
-          <div className="p-6 sm:p-8 space-y-6">
+          <div className={`p-6 sm:p-8 space-y-6 ${isUploading ? 'opacity-60 pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
                 <ImageIcon size={16} className="text-blue-500" />
                 Foto's ({existingPhotoFiles.length + images.length})
               </label>
               <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-blue-600 hover:text-blue-700 text-xs font-bold flex items-center gap-1 transition-colors"
+                onClick={() => !isUploading && fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="text-blue-600 hover:text-blue-700 text-xs font-bold flex items-center gap-1 transition-colors disabled:text-slate-300 disabled:hover:text-slate-300"
               >
                 <Upload size={14} />
                 Toevoegen
@@ -668,6 +669,9 @@ const UploadStep: React.FC<UploadStepProps> = ({
               onChange={handleFileChange}
               multiple
               accept="image/*"
+              // Vraag op mobiele apparaten specifiek om de achtercamera
+              // (browsers zien 'environment' als hint; op desktop heeft dit geen effect)
+              capture="environment"
               className="hidden"
             />
 
@@ -742,8 +746,9 @@ const UploadStep: React.FC<UploadStepProps> = ({
                 
                 {/* Toevoegen knop */}
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all"
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/30 transition-all disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-400 disabled:hover:bg-transparent"
                 >
                   <Upload size={20} />
                   <span className="text-[10px] font-bold uppercase">Meer</span>
@@ -751,7 +756,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
               </div>
             ) : (
               <div 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isUploading && fileInputRef.current?.click()}
                 className="h-64 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-4 hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer group bg-slate-50/50"
               >
                 <div className="w-16 h-16 bg-white shadow-sm text-slate-300 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:text-blue-500 transition-all">
@@ -797,6 +802,13 @@ const UploadStep: React.FC<UploadStepProps> = ({
             )}
           </div>
         </div>
+        {/* Volledige overlay tijdens uploaden */}
+        {isUploading && (
+          <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex flex-col items-center justify-center z-20">
+            <Loader2 className="animate-spin text-blue-600 mb-3" size={32} />
+            <p className="text-sm font-medium text-slate-700">Bezig met uploaden, even wachten...</p>
+          </div>
+        )}
       </div>
     </div>
     </>

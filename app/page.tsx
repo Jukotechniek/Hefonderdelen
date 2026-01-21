@@ -19,6 +19,34 @@ export default function Home() {
   });
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
 
+  // Herstel laatste bekende stap/product uit localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('hefonderdelen-app-state');
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<AppState>;
+      setState(prev => ({
+        ...prev,
+        step: saved.step ?? prev.step,
+        productId: saved.productId ?? prev.productId,
+        description: saved.description ?? prev.description,
+      }));
+    } catch {
+      // negeer corrupte storage
+    }
+  }, []);
+
+  // Sla relevante staat op zodat we na reload terugkeren naar dezelfde pagina
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { step, productId, description } = state;
+    window.localStorage.setItem(
+      'hefonderdelen-app-state',
+      JSON.stringify({ step, productId, description })
+    );
+  }, [state.step, state.productId, state.description]);
+
   useEffect(() => {
     // Check of Supabase geconfigureerd is
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -57,7 +85,14 @@ export default function Home() {
             setState(prev => ({ ...prev, user: session.user, step: 'password-setup' }));
             window.history.replaceState({}, document.title, window.location.pathname);
           } else {
-            setState(prev => ({ ...prev, user: session.user, step: 'input' }));
+            // Alleen naar 'input' gaan als we nog niet midden in een product-flow zitten
+            setState(prev => {
+              const nextStep =
+                prev.step === 'auth' || prev.step === 'password-setup'
+                  ? 'input'
+                  : prev.step;
+              return { ...prev, user: session.user, step: nextStep };
+            });
           }
         }
       }).catch((err) => {
@@ -96,7 +131,13 @@ export default function Home() {
 
           // Geen invite meer of wachtwoord al ingesteld -> normale flow
           setNeedsPasswordSetup(false);
-          setState(prev => ({ ...prev, user: session.user, step: 'input' }));
+          setState(prev => {
+            const nextStep =
+              prev.step === 'auth' || prev.step === 'password-setup'
+                ? 'input'
+                : prev.step;
+            return { ...prev, user: session.user, step: nextStep };
+          });
         } else {
           setNeedsPasswordSetup(false);
           setState(prev => ({ ...prev, user: null, step: 'auth' }));

@@ -10,32 +10,32 @@ import { AppState, UploadedFile } from '../types';
 import { LogOut, Package } from 'lucide-react';
 
 export default function Home() {
-  const [state, setState] = useState<AppState>({
-    step: 'auth',
-    productId: '',
-    description: '',
-    images: [],
-    user: null,
-  });
-  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
-
-  // Herstel laatste bekende stap/product uit localStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  // Laad initialState direct uit localStorage als beschikbaar
+  const getInitialState = (): AppState => {
+    if (typeof window === 'undefined') {
+      return { step: 'auth', productId: '', description: '', images: [], user: null };
+    }
     try {
       const raw = window.localStorage.getItem('hefonderdelen-app-state');
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Partial<AppState>;
-      setState(prev => ({
-        ...prev,
-        step: saved.step ?? prev.step,
-        productId: saved.productId ?? prev.productId,
-        description: saved.description ?? prev.description,
-      }));
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<AppState>;
+        // Alleen step, productId en description uit localStorage, images/user altijd leeg/null
+        return {
+          step: (saved.step && saved.step !== 'auth' && saved.step !== 'password-setup') ? saved.step : 'auth',
+          productId: saved.productId || '',
+          description: saved.description || '',
+          images: [],
+          user: null,
+        };
+      }
     } catch {
       // negeer corrupte storage
     }
-  }, []);
+    return { step: 'auth', productId: '', description: '', images: [], user: null };
+  };
+
+  const [state, setState] = useState<AppState>(getInitialState());
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
 
   // Sla relevante staat op zodat we na reload terugkeren naar dezelfde pagina
   useEffect(() => {
@@ -85,15 +85,29 @@ export default function Home() {
             setState(prev => ({ ...prev, user: session.user, step: 'password-setup' }));
             window.history.replaceState({}, document.title, window.location.pathname);
           } else {
-            // Alleen naar 'input' gaan als we nog niet midden in een product-flow zitten
+            // Behoud huidige stap als we al midden in een flow zitten (details/success)
+            // Alleen overschrijf naar 'input' als we op auth/password-setup staan
             setState(prev => {
-              const nextStep =
-                prev.step === 'auth' || prev.step === 'password-setup'
-                  ? 'input'
-                  : prev.step;
+              // Als we al op details of success staan, behoud die stap
+              if (prev.step === 'details' || prev.step === 'success' || prev.step === 'input') {
+                return { ...prev, user: session.user };
+              }
+              // Anders: als we op auth/password-setup staan, ga naar input
+              const nextStep = (prev.step === 'auth' || prev.step === 'password-setup') ? 'input' : prev.step;
               return { ...prev, user: session.user, step: nextStep };
             });
           }
+        } else {
+          // Geen sessie: als we op details/success staan, behoud de stap maar zonder user
+          // Dit zorgt ervoor dat de pagina niet opeens terug springt naar auth
+          setState(prev => {
+            if (prev.step === 'details' || prev.step === 'success') {
+              // Blijf op details/success, maar markeer dat er geen user is
+              // De gebruiker kan dan nog steeds zien waar hij was
+              return prev;
+            }
+            return { ...prev, user: null, step: 'auth' };
+          });
         }
       }).catch((err) => {
         console.error('Supabase session check failed:', err);
@@ -132,10 +146,12 @@ export default function Home() {
           // Geen invite meer of wachtwoord al ingesteld -> normale flow
           setNeedsPasswordSetup(false);
           setState(prev => {
-            const nextStep =
-              prev.step === 'auth' || prev.step === 'password-setup'
-                ? 'input'
-                : prev.step;
+            // Behoud huidige stap als we al midden in een flow zitten
+            if (prev.step === 'details' || prev.step === 'success') {
+              return { ...prev, user: session.user };
+            }
+            // Alleen naar 'input' gaan als we op auth/password-setup staan
+            const nextStep = (prev.step === 'auth' || prev.step === 'password-setup') ? 'input' : prev.step;
             return { ...prev, user: session.user, step: nextStep };
           });
         } else {
@@ -155,6 +171,10 @@ export default function Home() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setState({ step: 'auth', productId: '', description: '', images: [], user: null });
+    // Clear localStorage bij logout
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('hefonderdelen-app-state');
+    }
   };
 
   const renderHeader = () => (
@@ -227,7 +247,16 @@ export default function Home() {
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Gelukt!</h2>
             <p className="text-slate-500 mb-8">Het product <span className="font-semibold text-slate-800">tvh/{state.productId}</span> is succesvol opgeslagen.</p>
             <button
-              onClick={() => setState({ ...state, step: 'input', productId: '', description: '', images: [] })}
+              onClick={() => {
+                setState({ ...state, step: 'input', productId: '', description: '', images: [] });
+                // Update localStorage voor nieuwe flow
+                if (typeof window !== 'undefined') {
+                  window.localStorage.setItem(
+                    'hefonderdelen-app-state',
+                    JSON.stringify({ step: 'input', productId: '', description: '' })
+                  );
+                }
+              }}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition-all"
             >
               Nieuw product

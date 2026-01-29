@@ -162,6 +162,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
     }
   };
 
+
   const handleConfirmOverwrite = async () => {
     setIsUploading(true);
     setShowDescriptionConfirm(false);
@@ -176,7 +177,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
       await saveDescription(pendingDescription, existingProduct);
       
       // Ga door met success
-      if (uploadedUrls.length > 0 || images.length === 0) {
+      if (uploadedUrls.length > 0 || images.length === 0 || existingPhotoFiles.length > 0) {
         onSuccess();
       } else {
         throw new Error('Geen foto\'s geüpload');
@@ -445,7 +446,11 @@ const UploadStep: React.FC<UploadStepProps> = ({
 
       // Alles is opgeslagen in Supabase Storage
       setUploadedUrls(uploadedUrls);
-      if (uploadedUrls.length > 0 || images.length === 0) {
+      
+      // Product wordt automatisch naar Shopify gesynchroniseerd via periodieke sync job
+      // (producten die > 5 dagen geleden zijn geüpdatet worden automatisch gesynct)
+      
+      if (uploadedUrls.length > 0 || images.length === 0 || existingPhotoFiles.length > 0) {
         onSuccess();
       } else {
         throw new Error('Geen foto\'s geüpload');

@@ -9,9 +9,9 @@ export async function POST(request: NextRequest) {
     const hasDescription = description && description.trim() !== '';
     const hasProductName = product_name && product_name.trim() !== '';
 
-    if (!hasDescription && !hasProductName) {
+    if (!hasProductName) {
       return NextResponse.json(
-        { error: 'Product naam of beschrijving is vereist' },
+        { error: 'Product naam is vereist' },
         { status: 400 }
       );
     }
@@ -91,9 +91,8 @@ export async function POST(request: NextRequest) {
         {
           role: 'user',
           content: `
-        ${hasProductName ? `Product: ${product_name}` : ''}
-        ${hasProductName && hasDescription ? '\n' : ''}
-        ${hasDescription ? `Ruwe beschrijving:\n${description}` : ''}
+        Product: ${product_name}
+        ${hasDescription ? `\nRuwe beschrijving:\n${description}` : ''}
         `
         }
         

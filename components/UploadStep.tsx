@@ -216,11 +216,8 @@ const UploadStep: React.FC<UploadStepProps> = ({
   const handleAiHelp = async () => {
     if (isGenerating) return;
     
-    const hasProductName = productName && productName.trim() !== '';
-    const hasDescription = description && description.trim() !== '';
-    
-    if (!hasProductName && !hasDescription) {
-      setError('⚠️ Voer een product naam of beschrijving in voordat je AI hulp gebruikt.');
+    if (!productName || productName.trim() === '') {
+      setError('⚠️ Voer eerst een product naam in voordat je AI hulp gebruikt.');
       return;
     }
 
@@ -333,6 +330,12 @@ const UploadStep: React.FC<UploadStepProps> = ({
   };
 
   const handleSave = async () => {
+    // Check of product naam is ingevuld
+    if (!productName || productName.trim() === '') {
+      setError("Product naam is verplicht. Voer een product naam in voordat je kunt opslaan.");
+      return;
+    }
+    
     // Check of er foto's zijn (bestaand of nieuw)
     const totalPhotos = existingPhotoFiles.length + images.length;
     

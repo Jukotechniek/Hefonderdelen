@@ -13,16 +13,17 @@ export default function Home() {
   // Laad initialState direct uit localStorage als beschikbaar
   const getInitialState = (): AppState => {
     if (typeof window === 'undefined') {
-      return { step: 'auth', productId: '', description: '', images: [], user: null };
+      return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
     }
     try {
       const raw = window.localStorage.getItem('hefonderdelen-app-state');
       if (raw) {
         const saved = JSON.parse(raw) as Partial<AppState>;
-        // Alleen step, productId en description uit localStorage, images/user altijd leeg/null
+        // Alleen step, productId, productName en description uit localStorage, images/user altijd leeg/null
         return {
           step: (saved.step && saved.step !== 'auth' && saved.step !== 'password-setup') ? saved.step : 'auth',
           productId: saved.productId || '',
+          productName: saved.productName || '',
           description: saved.description || '',
           images: [],
           user: null,
@@ -31,7 +32,7 @@ export default function Home() {
     } catch {
       // negeer corrupte storage
     }
-    return { step: 'auth', productId: '', description: '', images: [], user: null };
+    return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
   };
 
   const [state, setState] = useState<AppState>(getInitialState());
@@ -40,12 +41,12 @@ export default function Home() {
   // Sla relevante staat op zodat we na reload terugkeren naar dezelfde pagina
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const { step, productId, description } = state;
+    const { step, productId, productName, description } = state;
     window.localStorage.setItem(
       'hefonderdelen-app-state',
-      JSON.stringify({ step, productId, description })
+      JSON.stringify({ step, productId, productName, description })
     );
-  }, [state.step, state.productId, state.description]);
+  }, [state.step, state.productId, state.productName, state.description]);
 
   useEffect(() => {
     // Check of Supabase geconfigureerd is
@@ -170,7 +171,7 @@ export default function Home() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setState({ step: 'auth', productId: '', description: '', images: [], user: null });
+    setState({ step: 'auth', productId: '', productName: '', description: '', images: [], user: null });
     // Clear localStorage bij logout
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('hefonderdelen-app-state');
@@ -228,6 +229,8 @@ export default function Home() {
         {state.step === 'details' && (
           <UploadStep 
             productId={state.productId}
+            productName={state.productName}
+            onProductNameChange={(val) => setState(prev => ({ ...prev, productName: val }))}
             description={state.description}
             onDescriptionChange={(val) => setState(prev => ({ ...prev, description: val }))}
             images={state.images}
@@ -248,12 +251,12 @@ export default function Home() {
             <p className="text-slate-500 mb-8">Het product <span className="font-semibold text-slate-800">tvh/{state.productId}</span> is succesvol opgeslagen.</p>
             <button
               onClick={() => {
-                setState({ ...state, step: 'input', productId: '', description: '', images: [] });
+                setState({ ...state, step: 'input', productId: '', productName: '', description: '', images: [] });
                 // Update localStorage voor nieuwe flow
                 if (typeof window !== 'undefined') {
                   window.localStorage.setItem(
                     'hefonderdelen-app-state',
-                    JSON.stringify({ step: 'input', productId: '', description: '' })
+                    JSON.stringify({ step: 'input', productId: '', productName: '', description: '' })
                   );
                 }
               }}

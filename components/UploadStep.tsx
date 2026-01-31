@@ -19,6 +19,8 @@ import { supabase } from '../lib/supabase';
 
 interface UploadStepProps {
   productId: string;
+  productName: string;
+  onProductNameChange: (val: string) => void;
   description: string;
   onDescriptionChange: (val: string) => void;
   images: UploadedFile[];
@@ -28,7 +30,9 @@ interface UploadStepProps {
 }
 
 const UploadStep: React.FC<UploadStepProps> = ({ 
-  productId, 
+  productId,
+  productName,
+  onProductNameChange,
   description, 
   onDescriptionChange, 
   images, 
@@ -43,7 +47,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
   const [existingDescription, setExistingDescription] = useState<string | null>(null);
   const [pendingDescription, setPendingDescription] = useState<string>('');
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
-  const [existingFilesInfo, setExistingFilesInfo] = useState<{hasPhotos: boolean, hasDescription: boolean, existingPhotos: string[]} | null>(null);
+  const [existingFilesInfo, setExistingFilesInfo] = useState<{hasPhotos: boolean, hasDescription: boolean, hasProductName: boolean, existingPhotos: string[]} | null>(null);
   const [showExistingDataWarning, setShowExistingDataWarning] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [existingPhotoFiles, setExistingPhotoFiles] = useState<Array<{url: string, path: string}>>([]);
@@ -56,18 +60,24 @@ const UploadStep: React.FC<UploadStepProps> = ({
       
       const articleNumber = `TVH/${productId}`;
       
-      // Check database voor beschrijving
+      // Check database voor beschrijving en product naam
       const { data: productData } = await supabase
         .from('products')
-        .select('shopify_description')
+        .select('shopify_description, product_name')
         .eq('article_number', articleNumber)
         .single();
       
       const hasDescription = productData?.shopify_description && productData.shopify_description.trim().length > 0;
+      const hasProductName = productData?.product_name && productData.product_name.trim().length > 0;
       
       // Laad bestaande beschrijving in textarea als die bestaat
       if (hasDescription && productData.shopify_description) {
         onDescriptionChange(productData.shopify_description);
+      }
+      
+      // Laad bestaande product naam als die bestaat
+      if (hasProductName && productData.product_name) {
+        onProductNameChange(productData.product_name);
       }
       
       // Check Storage voor foto's
@@ -100,20 +110,23 @@ const UploadStep: React.FC<UploadStepProps> = ({
       
       const hasPhotos = existingPhotos.length > 0;
       
-      if (hasPhotos || hasDescription) {
+      if (hasPhotos || hasDescription || hasProductName) {
         setExistingFilesInfo({
           hasPhotos,
           hasDescription: !!hasDescription,
+          hasProductName: !!hasProductName,
           existingPhotos
         });
         
-        // Als beide bestaan, toon waarschuwing
-        if (hasPhotos && hasDescription) {
+        // Als foto's, beschrijving en/of product naam bestaan, toon waarschuwing
+        if (hasPhotos && (hasDescription || hasProductName)) {
+          setShowExistingDataWarning(true);
+        } else if (hasDescription && hasProductName) {
           setShowExistingDataWarning(true);
         }
         
         // Als alleen foto's bestaan, laad ze in en maak upload disabled
-        if (hasPhotos && !hasDescription) {
+        if (hasPhotos && !hasDescription && !hasProductName) {
           // Converteer URLs naar UploadedFile format (voor preview)
           // We kunnen de foto's niet echt als File objecten maken, maar we kunnen ze wel tonen
           // Voor nu: toon melding dat gebruiker alleen beschrijving kan toevoegen
@@ -127,12 +140,14 @@ const UploadStep: React.FC<UploadStepProps> = ({
   const saveDescription = async (desc: string, existingProduct: any) => {
     try {
       const articleNumber = `TVH/${productId}`;
+      const productNameToSave = productName && productName.trim() ? productName.trim() : `TVH ${productId}`;
       
       if (existingProduct) {
         // Update bestaand product
         const { error: updateError } = await supabase
           .from('products')
           .update({ 
+            product_name: productNameToSave,
             shopify_description: desc,
             updated_at: new Date().toISOString()
           })
@@ -148,7 +163,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
           .from('products')
           .insert({
             article_number: articleNumber,
-            product_name: `TVH ${productId}`, // Verplicht veld
+            product_name: productNameToSave,
             shopify_description: desc
           });
 
@@ -201,8 +216,11 @@ const UploadStep: React.FC<UploadStepProps> = ({
   const handleAiHelp = async () => {
     if (isGenerating) return;
     
-    if (!description || description.trim() === '') {
-      setError('⚠️ Voer eerst een beschrijving in voordat je AI hulp gebruikt.');
+    const hasProductName = productName && productName.trim() !== '';
+    const hasDescription = description && description.trim() !== '';
+    
+    if (!hasProductName && !hasDescription) {
+      setError('⚠️ Voer een product naam of beschrijving in voordat je AI hulp gebruikt.');
       return;
     }
 
@@ -214,7 +232,10 @@ const UploadStep: React.FC<UploadStepProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ description })
+        body: JSON.stringify({ 
+          description: description || '', 
+          product_name: productName || '' 
+        })
       });
 
       if (!response.ok) {
@@ -495,19 +516,29 @@ const UploadStep: React.FC<UploadStepProps> = ({
                 <h3 className="text-2xl font-bold text-slate-800">Product bestaat al</h3>
               </div>
               <p className="text-slate-600 mb-6">
-                Dit product heeft al foto's en een beschrijving. Het is niet nodig om deze opnieuw toe te voegen.
+                Dit product heeft al foto's, een beschrijving en/of een product naam. Het is niet nodig om deze opnieuw toe te voegen.
               </p>
               
               <div className="bg-slate-50 rounded-lg p-4 mb-6">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-green-600" />
-                    <span className="text-sm text-slate-700">Foto's: {existingFilesInfo.existingPhotos.length} foto(s) aanwezig</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-green-600" />
-                    <span className="text-sm text-slate-700">Beschrijving: Aanwezig</span>
-                  </div>
+                  {existingFilesInfo.hasPhotos && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-green-600" />
+                      <span className="text-sm text-slate-700">Foto's: {existingFilesInfo.existingPhotos.length} foto(s) aanwezig</span>
+                    </div>
+                  )}
+                  {existingFilesInfo.hasProductName && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-green-600" />
+                      <span className="text-sm text-slate-700">Product naam: Aanwezig</span>
+                    </div>
+                  )}
+                  {existingFilesInfo.hasDescription && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-green-600" />
+                      <span className="text-sm text-slate-700">Beschrijving: Aanwezig</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -617,6 +648,21 @@ const UploadStep: React.FC<UploadStepProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
           {/* Left: Description Section */}
           <div className="p-6 sm:p-8 space-y-6">
+            <div>
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">
+                <AlignLeft size={16} className="text-blue-500" />
+                Product Naam
+              </label>
+              <input
+                type="text"
+                value={productName}
+                onChange={(e) => onProductNameChange(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all outline-none"
+                placeholder="Voer product naam in..."
+                required
+              />
+            </div>
+
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
                 <AlignLeft size={16} className="text-blue-500" />

@@ -4,11 +4,14 @@ import OpenAI from 'openai';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { description } = body;
+    const { description, product_name } = body;
 
-    if (!description || description.trim() === '') {
+    const hasDescription = description && description.trim() !== '';
+    const hasProductName = product_name && product_name.trim() !== '';
+
+    if (!hasDescription && !hasProductName) {
       return NextResponse.json(
-        { error: 'Beschrijving is vereist' },
+        { error: 'Product naam of beschrijving is vereist' },
         { status: 400 }
       );
     }
@@ -31,29 +34,69 @@ export async function POST(request: NextRequest) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
+        
         {
           role: 'system',
-          content: 'Je bent een technische schrijver die ruwe productbeschrijvingen transformeert naar professionele productomschrijvingen in het Nederlands voor heftruck- en magazijnwagen onderdelen. Je schrijft in een specifieke stijl die altijd de volgende elementen bevat: 1) Wat het product is en waarvoor het wordt gebruikt, 2) Kwaliteit, duurzaamheid en betrouwbaarheid benadrukken, 3) Voordelen zoals eenvoudige montage en efficiëntie beschrijven, 4) Eindigen met een call-to-action over productiviteit. BELANGRIJK: Gebruik ALLEEN technische details die expliciet in de ruwe beschrijving staan. Verzin GEEN extra afmetingen, maten of specificaties.'
-        },
+          content: `
+        Je bent een technische productschrijver voor industriële onderdelen.
+        
+        JE TAAK:
+        - Schrijf een korte productomschrijving in het Nederlands van 1 tot maximaal 2 zinnen.
+        - Zin 1: wat het product is en waarvoor het wordt gebruikt (functie/toepassing).
+        - Zin 2 (alleen indien relevant): noem extra technische info die letterlijk in de ruwe beschrijving staat (bijv. afmetingen, materiaal, aansluitingen, type/nummer, compatibiliteit, druk/temperatuur, etc.).
+        
+        HARD VERBOD:
+        - Geen aannames of verzonnen info
+        - Geen voordelen/marketing (geen “hoogwaardig”, “duurzaam”, “perfect”, “voorkom stilstand”, etc.)
+        - Geen call-to-action
+        - Geen opsommingen, geen kopjes, geen markdown
+        - Geen derde zin
+        
+        REGEL:
+        Gebruik UITSLUITEND informatie die expliciet in de ruwe beschrijving staat.
+        Als er geen extra technische details staan, schrijf dan precies 1 zin.
+        
+        VOORBEELDEN:
+        
+        Input:
+        Product: Gasveer
+        Ruwe beschrijving:
+        Een gasveer functioneert voor het open of omhoog houden van een deur of klep
+        
+        Output:
+        Een gasveer functioneert voor het open of omhoog houden van een deur of klep.
+        
+        Input:
+        Product: Hydrauliekslang
+        Ruwe beschrijving:
+        Een hydrauliekslang zorgt voor het transport van olie van punt A naar B
+        
+        Output:
+        Een hydrauliekslang zorgt voor het transport van olie van punt A naar B.
+        
+        Input:
+        Product: Hydrauliekslang
+        Ruwe beschrijving:
+        Hydrauliekslang voor olie, lengte 1 meter, aansluiting 3/8"
+        
+        Output:
+        Deze hydrauliekslang is bedoeld voor het transport van olie. Lengte: 1 meter, aansluiting: 3/8".
+        
+        OUTPUT:
+        Geef alleen de definitieve tekst (1–2 zinnen).
+        `
+        }
+        
+        ,
         {
           role: 'user',
-          content: `Schrijf een professionele productbeschrijving in het Nederlands voor een heftruckonderdeel. Volg deze structuur:
-
-1. **Functie en toepassing**: Leg uit wat het product is en waarvoor het dient (bijvoorbeeld: "Dit onderdeel is essentieel voor het optimaal functioneren van uw heftruck of magazijnwagen")
-
-2. **Kwaliteit en betrouwbaarheid**: Benadruk de hoogwaardige materialen, duurzaamheid en betrouwbare prestaties, ook onder zware werkomstandigheden
-
-3. **Praktische voordelen**: Beschrijf voordelen zoals eenvoudige montage, perfecte pasvorm en bijdrage aan soepele werking
-
-4. **Call-to-action**: Sluit af met een oproep gericht op verhoogde productiviteit en het voorkomen van stilstand
-
-CRUCIALE REGEL: Gebruik UITSLUITEND technische specificaties (afmetingen, diameter, lengte, gewicht, etc.) die letterlijk in onderstaande ruwe beschrijving staan. Verzin NOOIT extra gegevens of specificaties die niet expliciet vermeld worden.
-
-Ruwe beschrijving:
-${description}
-
-Schrijf een compacte beschrijving van 2-3 korte alinea's (circa 100 woorden totaal). Geef alleen de definitieve productomschrijving, zonder inleiding, uitleg of opmaak.`
+          content: `
+        ${hasProductName ? `Product: ${product_name}` : ''}
+        ${hasProductName && hasDescription ? '\n' : ''}
+        ${hasDescription ? `Ruwe beschrijving:\n${description}` : ''}
+        `
         }
+        
       ],
       max_tokens: 150,
       temperature: 0.7

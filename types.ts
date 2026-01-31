@@ -8,6 +8,7 @@ export interface UploadedFile {
 export interface AppState {
   step: 'auth' | 'input' | 'details' | 'success' | 'password-setup';
   productId: string;
+  productName: string;
   description: string;
   images: UploadedFile[];
   user: any | null;

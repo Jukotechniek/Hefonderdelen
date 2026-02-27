@@ -11,10 +11,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/page.js"
     ],
-    "/api/ai/openai/route": [
+    "/manifest.webmanifest/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/ai/openai/route.js"
+      "static/chunks/app/manifest.webmanifest/route.js"
+    ],
+    "/api/jobs/process-and-upload/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/jobs/process-and-upload/route.js"
     ]
   }
 }

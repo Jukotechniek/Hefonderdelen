@@ -1,3 +1,5 @@
 {
+  "/manifest.webmanifest/route": "app/manifest.webmanifest/route.js",
+  "/api/jobs/process-and-upload/route": "app/api/jobs/process-and-upload/route.js",
   "/page": "app/page.js"
 }

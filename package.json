@@ -12,11 +12,13 @@
   "dependencies": {
     "@google/genai": "^1.37.0",
     "@supabase/supabase-js": "^2.90.1",
+    "@xixiyahaha/rembg-node": "^2.2.0",
     "lucide-react": "^0.562.0",
     "next": "^15.1.0",
     "openai": "^4.71.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -26,7 +28,6 @@
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.0",
     "postcss": "^8.4.0",
-    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.0",
     "typescript": "~5.8.2"
   }

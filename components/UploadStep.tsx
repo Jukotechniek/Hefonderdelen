@@ -277,14 +277,20 @@ const UploadStep: React.FC<UploadStepProps> = ({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files).map((file: File) => ({
-        file,
-        preview: URL.createObjectURL(file),
-        id: Math.random().toString(36).substr(2, 9)
-      }));
-      onImagesChange([...images, ...newFiles]);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!e.target.files) {
+      return;
+    }
+
+    const newFiles = Array.from(e.target.files).map((file: File) => ({
+      file,
+      preview: URL.createObjectURL(file),
+      id: Math.random().toString(36).substr(2, 9)
+    }));
+
+    onImagesChange([...images, ...newFiles]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -347,157 +353,42 @@ const UploadStep: React.FC<UploadStepProps> = ({
     setIsUploading(true);
     setError(null);
     
-    // Declareer uploadedUrls buiten try block zodat het beschikbaar is in catch
-    const uploadedUrls: string[] = [];
-    
     try {
-      // Eerst uploaden naar Supabase Storage
+      // Haal huidige Supabase sessie op zodat we het JWT kunnen doorgeven aan de API-route
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
       
-      if (images.length > 0) {
-        // Check of Supabase Storage is geconfigureerd
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-        const hasSupabase = supabaseUrl && supabaseUrl !== '' && supabaseUrl !== 'https://placeholder.supabase.co';
-        
-        if (hasSupabase) {
-          // Probeer te uploaden naar Supabase Storage
-          for (const img of images) {
-            let fileName = '';
-            let uploadSuccess = false;
-            
-            try {
-              // Upload naar tvh-{productId}/ met bestandsnamen {productId}-{nummer}.jpg
-              // Nummering: start vanaf aantal bestaande foto's + 1
-              const fileExt = img.file.name.split('.').pop() || 'jpg';
-              const startNumber = existingPhotoFiles.length + 1;
-              const imageNumber = images.indexOf(img) + startNumber;
-              fileName = `tvh-${productId}/tvh-${productId}-${imageNumber}.${fileExt}`;
-              
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('product-images')
-                .upload(fileName, img.file, {
-                  cacheControl: '3600',
-                  upsert: true // Overschrijf als bestand al bestaat
-                });
-
-              if (uploadError) {
-                console.error('Upload error:', uploadError);
-                
-                // Specifieke foutmeldingen
-                if (uploadError.message?.includes('Bucket') || uploadError.message?.includes('not found')) {
-                  throw new Error(`Supabase Storage bucket 'product-images' bestaat niet. Maak deze aan in je Supabase dashboard (Storage → Create bucket).`);
-                } else if (uploadError.message?.includes('JWT') || uploadError.message?.includes('auth')) {
-                  throw new Error(`Supabase authenticatie fout. Controleer je NEXT_PUBLIC_SUPABASE_ANON_KEY in je .env bestand.`);
-                } else if (uploadError.message?.includes('new row violates') || uploadError.message?.includes('policy')) {
-                  throw new Error(`Supabase Storage policy fout. Zorg dat de bucket 'product-images' publieke toegang heeft of dat je RLS policies correct zijn ingesteld.`);
-                } else {
-                  throw new Error(`Foto upload mislukt: ${uploadError.message || 'Onbekende fout'}`);
-                }
-              }
-
-              uploadSuccess = true;
-
-              // Haal publieke URL op
-              const { data: urlData } = supabase.storage
-                .from('product-images')
-                .getPublicUrl(fileName);
-
-              // getPublicUrl geeft altijd een object terug, check of de URL geldig is
-              const publicUrl = urlData?.publicUrl || '';
-              if (publicUrl && publicUrl.length > 0) {
-                uploadedUrls.push(publicUrl);
-                console.log(`Foto geüpload: ${fileName} -> ${publicUrl}`);
-              } else {
-                // Als er geen publieke URL is, gebruik de path om een URL te construeren
-                const constructedUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${fileName}`;
-                uploadedUrls.push(constructedUrl);
-                console.log(`Gebruik geconstrueerde URL: ${constructedUrl}`);
-              }
-            } catch (imgError: any) {
-              // Log de fout maar gooi alleen door als het echt een kritieke fout is
-              console.error(`Fout bij uploaden van ${img.file.name}:`, imgError);
-              // Als de upload succesvol was maar alleen de URL ophalen faalde, probeer door te gaan
-              if (uploadSuccess && imgError.message?.includes('publieke URL') && fileName) {
-                // Upload was succesvol, gebruik geconstrueerde URL
-                const constructedUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${fileName}`;
-                uploadedUrls.push(constructedUrl);
-                console.warn(`Gebruik geconstrueerde URL als fallback: ${constructedUrl}`);
-              } else {
-                throw new Error(`Fout bij uploaden van ${img.file.name}: ${imgError.message}`);
-              }
-            }
-          }
-        } else {
-          // Als Supabase niet is geconfigureerd, gebruik base64 of data URLs (tijdelijk)
-          // Dit is niet ideaal maar werkt als fallback
-          throw new Error('Supabase Storage is niet geconfigureerd. Configureer NEXT_PUBLIC_SUPABASE_URL en NEXT_PUBLIC_SUPABASE_ANON_KEY in je .env bestand en maak een bucket genaamd "product-images" aan.');
-        }
-      }
-
-      // Opslaan van beschrijving in database (als ingevuld)
-      if (description && description.trim().length > 0) {
-        try {
-          const articleNumber = `TVH/${productId}`;
-          
-          // Check of product al bestaat en of er al een shopify_description is
-          const { data: existingProduct, error: searchError } = await supabase
-            .from('products')
-            .select('id, article_number, shopify_description')
-            .eq('article_number', articleNumber)
-            .single();
-
-          if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = not found
-            console.error('Error searching for product:', searchError);
-            throw new Error(`Fout bij zoeken naar product: ${searchError.message}`);
-          }
-
-          // Als product bestaat en heeft al een shopify_description, vraag bevestiging
-          if (existingProduct && existingProduct.shopify_description && existingProduct.shopify_description.trim().length > 0) {
-            setUploadedUrls(uploadedUrls); // Sla URLs op voor later gebruik
-            setExistingDescription(existingProduct.shopify_description);
-            setPendingDescription(description.trim());
-            setShowDescriptionConfirm(true);
-            setIsUploading(false);
-            return; // Stop hier en wacht op bevestiging
-          }
-
-          // Geen bestaande beschrijving, sla direct op
-          await saveDescription(description.trim(), existingProduct);
-        } catch (dbError: any) {
-          console.error('Database error:', dbError);
-          throw new Error(`Fout bij opslaan van beschrijving: ${dbError.message}`);
-        }
-      }
-
-      // Alles is opgeslagen in Supabase Storage
-      setUploadedUrls(uploadedUrls);
+      const formData = new FormData();
+      formData.append('productId', productId);
+      formData.append('productName', productName);
+      formData.append('description', description || '');
       
-      // Product wordt automatisch naar Shopify gesynchroniseerd via periodieke sync job
-      // (producten die > 5 dagen geleden zijn geüpdatet worden automatisch gesynct)
+      images.forEach((img, index) => {
+        formData.append('images', img.file, `image-${index}.jpg`);
+      });
       
-      if (uploadedUrls.length > 0 || images.length === 0 || existingPhotoFiles.length > 0) {
-        onSuccess();
-      } else {
-        throw new Error('Geen foto\'s geüpload');
+      const headers: HeadersInit = {};
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
       }
+      
+      const response = await fetch('/api/jobs/process-and-upload', {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const errorMessage = data.error || 'Onbekende fout bij verwerken/uploaden.';
+        throw new Error(errorMessage);
+      }
+      
+      // We wachten niet op het volledige verwerkingsproces, alleen op het succesvol starten
+      onSuccess();
     } catch (err: any) {
       console.error('Save error:', err);
-      
-      // Betere error messages met meer details
-      let errorMessage = err.message || 'Er is iets fout gegaan bij het opslaan.';
-      
-      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.name === 'TypeError') {
-        if (err.message?.includes('Supabase') || err.stack?.includes('supabase')) {
-          errorMessage = 'Supabase Storage fout: Controleer of de bucket "product-images" bestaat en of je Supabase credentials correct zijn.';
-        } else {
-          errorMessage = 'Netwerkfout: Controleer je internetverbinding. Als het probleem aanhoudt, controleer de browser console (F12) voor meer details.';
-        }
-      } else if (err.message?.includes('bucket') || err.message?.includes('Bucket')) {
-        errorMessage = err.message; // Gebruik de specifieke bucket foutmelding
-      } else if (err.message?.includes('authenticatie') || err.message?.includes('auth') || err.message?.includes('JWT')) {
-        errorMessage = err.message; // Gebruik de specifieke auth foutmelding
-      }
-      
-      setError(errorMessage);
+      setError(err.message || 'Er is iets fout gegaan bij het opslaan.');
     } finally {
       setIsUploading(false);
     }
@@ -637,13 +528,17 @@ const UploadStep: React.FC<UploadStepProps> = ({
           </div>
 
           <div className="flex gap-3 w-full sm:w-auto">
-             <button
+            <button
               onClick={handleSave}
               disabled={isUploading || (images.length === 0 && !existingFilesInfo?.hasPhotos)}
               className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200"
             >
               {isUploading ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-              {isUploading ? "Verzenden..." : existingFilesInfo?.hasPhotos && !existingFilesInfo.hasDescription ? "Beschrijving opslaan" : "Opslaan"}
+              {isUploading
+                ? 'Verzenden...'
+                : existingFilesInfo?.hasPhotos && !existingFilesInfo.hasDescription
+                ? 'Beschrijving opslaan'
+                : 'Opslaan'}
             </button>
           </div>
         </div>

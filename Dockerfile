@@ -25,8 +25,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-# Python libs: rembg (lokaal model), pillow, numpy
-RUN pip3 install --no-cache-dir rembg pillow numpy
+# Python libs: rembg (lokaal model) + onnxruntime (verplicht voor rembg), pillow, numpy
+RUN pip3 install --no-cache-dir onnxruntime rembg pillow numpy
 
 # Zorgen dat je Node-code 'python3' gebruikt
 ENV PYTHON=python3

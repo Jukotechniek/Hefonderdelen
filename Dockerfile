@@ -20,20 +20,13 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Python + pip + systeembibliotheken voor OpenCV/transparent_background
+# Python + pip voor scripts/remove_bg.py (rembg, geen PyTorch)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      python3 python3-pip \
-      libxcb1 \
-      libgl1 \
-      libglib2.0-0 \
-      libxrender1 \
-      libxext6 \
-      libsm6 && \
+    apt-get install -y --no-install-recommends python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-# Python libs voor scripts/remove_bg.py
-RUN pip3 install --no-cache-dir transparent-background pillow
+# Python libs: rembg (lokaal model), pillow, numpy
+RUN pip3 install --no-cache-dir rembg pillow numpy
 
 # Zorgen dat je Node-code 'python3' gebruikt
 ENV PYTHON=python3

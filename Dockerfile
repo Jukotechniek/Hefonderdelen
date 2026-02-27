@@ -25,8 +25,14 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-# Python libs: rembg (lokaal model) + onnxruntime (verplicht voor rembg), pillow, numpy
-RUN pip3 install --no-cache-dir onnxruntime rembg pillow numpy
+# Python libs: onnxruntime eerst (rembg-afhankelijkheid), dan rembg, pillow, numpy
+# python3 -m pip = zelfde interpreter als bij runtime
+RUN python3 -m pip install --no-cache-dir \
+    onnxruntime \
+    rembg \
+    pillow \
+    numpy \
+    && python3 -c "import onnxruntime; import rembg; print('ok')"
 
 # Zorgen dat je Node-code 'python3' gebruikt
 ENV PYTHON=python3
@@ -39,6 +45,7 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 USER nextjs
 

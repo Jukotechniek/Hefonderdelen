@@ -93,7 +93,39 @@ async function processAndUploadJob(
 
       await fs.writeFile(inputPath, Buffer.from(arrayBuffer));
 
-      await runPythonBackgroundRemoval(inputPath, outputPath);
+      // Probeer het Python-script meerdere keren per bestand zodat
+      // incidentele fouten niet de hele job stoppen.
+      const maxRetries = 2;
+      let success = false;
+
+      for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+        try {
+          await runPythonBackgroundRemoval(inputPath, outputPath);
+          success = true;
+          break;
+        } catch (err) {
+          console.error(
+            `Python processing failed for tvh-${productId}-${index} (attempt ${attempt}):`,
+            err
+          );
+
+          if (attempt > maxRetries) {
+            console.error(
+              `Giving up on tvh-${productId}-${index} after ${attempt} attempts, skipping this image.`
+            );
+          } else {
+            // Kleine pauze tussen pogingen om piekproblemen (bv. geheugen) de kans
+            // te geven om te herstellen.
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        }
+      }
+
+      if (!success) {
+        // Ga door met volgende bestand in plaats van de hele job te stoppen.
+        index += 1;
+        continue;
+      }
 
       const outputBuffer = await fs.readFile(outputPath);
 

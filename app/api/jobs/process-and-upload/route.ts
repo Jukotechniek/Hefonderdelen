@@ -111,7 +111,7 @@ async function processAndUploadJob(
 
           if (attempt > maxRetries) {
             console.error(
-              `Giving up on tvh-${productId}-${index} after ${attempt} attempts, skipping this image.`
+              `Giving up on tvh-${productId}-${index} after ${attempt} attempts, will upload original image without background removal.`
             );
           } else {
             // Kleine pauze tussen pogingen om piekproblemen (bv. geheugen) de kans
@@ -121,13 +121,18 @@ async function processAndUploadJob(
         }
       }
 
-      if (!success) {
-        // Ga door met volgende bestand in plaats van de hele job te stoppen.
-        index += 1;
-        continue;
-      }
+      let outputBuffer: Buffer;
 
-      const outputBuffer = await fs.readFile(outputPath);
+      if (success) {
+        // Verwerkte (witte) versie
+        outputBuffer = await fs.readFile(outputPath);
+      } else {
+        // Fallback: originele foto uploaden
+        console.log(
+          `Uploading original image for tvh-${productId}-${index} due to repeated processing failures.`
+        );
+        outputBuffer = Buffer.from(arrayBuffer);
+      }
 
       const fileName = `${folderPrefix}tvh-${productId}-${index}.jpg`;
 

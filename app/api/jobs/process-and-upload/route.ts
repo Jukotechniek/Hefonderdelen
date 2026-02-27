@@ -147,7 +147,11 @@ async function processAndUploadJob(
       if (uploadError) {
         console.error('Error uploading processed image:', uploadError);
       } else {
-        console.log(`Processed image uploaded: ${fileName}`);
+        if (success) {
+          console.log(`Processed (white background) image uploaded: ${fileName}`);
+        } else {
+          console.log(`Original (unprocessed) image uploaded: ${fileName}`);
+        }
       }
 
       index += 1;

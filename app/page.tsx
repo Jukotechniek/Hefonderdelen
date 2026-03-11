@@ -273,8 +273,7 @@ export default function Home() {
             </div>
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Gelukt!</h2>
             <p className="text-slate-500 mb-8">
-              De foto&apos;s voor <span className="font-semibold text-slate-800">tvh/{state.productId}</span> zijn veilig opgeslagen.
-              Het wit maken loopt nu automatisch op de achtergrond.
+              De foto&apos;s voor <span className="font-semibold text-slate-800">tvh/{state.productId}</span> zijn opgeslagen.
             </p>
             <button
               onClick={() => {

@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     for (const [index, file] of files.entries()) {
       const reservedJob = reservedJobs[index] as ReservedPhotoJob;
-      const originalStoragePath = `_queue/originals/${batchId}/${reservedJob.id}${getSafeOriginalExtension(file)}`;
+      const originalStoragePath = `_queue/originals/tvh-${productId}/${batchId}/${reservedJob.id}${getSafeOriginalExtension(file)}`;
       const fileBuffer = Buffer.from(await file.arrayBuffer());
 
       const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(

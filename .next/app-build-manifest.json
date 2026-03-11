@@ -16,6 +16,11 @@
       "static/chunks/main-app.js",
       "static/chunks/app/manifest.webmanifest/route.js"
     ],
+    "/api/jobs/process-queue/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/jobs/process-queue/route.js"
+    ],
     "/api/jobs/process-and-upload/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",

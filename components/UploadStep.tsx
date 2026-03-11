@@ -1,12 +1,10 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   Upload, 
   Camera, 
-  ImagePlus, 
   Loader2, 
-  Save, 
   Trash2, 
   ArrowLeft, 
   Sparkles, 
@@ -354,10 +352,9 @@ const UploadStep: React.FC<UploadStepProps> = ({
     setError(null);
     
     try {
-      // Haal huidige Supabase sessie op zodat we het JWT kunnen doorgeven aan de API-route
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
-      
+
       const formData = new FormData();
       formData.append('productId', productId);
       formData.append('productName', productName);
@@ -366,12 +363,12 @@ const UploadStep: React.FC<UploadStepProps> = ({
       images.forEach((img, index) => {
         formData.append('images', img.file, `image-${index}.jpg`);
       });
-      
+
       const headers: HeadersInit = {};
       if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
+        headers.Authorization = `Bearer ${accessToken}`;
       }
-      
+
       const response = await fetch('/api/jobs/process-and-upload', {
         method: 'POST',
         headers,
@@ -384,7 +381,7 @@ const UploadStep: React.FC<UploadStepProps> = ({
         throw new Error(errorMessage);
       }
       
-      // We wachten niet op het volledige verwerkingsproces, alleen op het succesvol starten
+      // We wachten alleen tot de originelen veilig zijn opgeslagen.
       onSuccess();
     } catch (err: any) {
       console.error('Save error:', err);

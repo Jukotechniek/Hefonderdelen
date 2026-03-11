@@ -38,6 +38,30 @@ export default function Home() {
   const [state, setState] = useState<AppState>(getInitialState());
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
 
+  useEffect(() => {
+    if (!state.user?.id) {
+      return;
+    }
+
+    const triggerQueue = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        const headers: HeadersInit = {};
+
+        if (accessToken) {
+          headers.Authorization = `Bearer ${accessToken}`;
+        }
+
+        await fetch('/api/jobs/process-queue', { method: 'POST', headers });
+      } catch (error) {
+        console.error('Queue runner kon niet opnieuw worden gestart:', error);
+      }
+    };
+
+    triggerQueue();
+  }, [state.user?.id]);
+
   // Sla relevante staat op zodat we na reload terugkeren naar dezelfde pagina
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -248,7 +272,10 @@ export default function Home() {
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Gelukt!</h2>
-            <p className="text-slate-500 mb-8">Het product <span className="font-semibold text-slate-800">tvh/{state.productId}</span> is succesvol opgeslagen.</p>
+            <p className="text-slate-500 mb-8">
+              De foto&apos;s voor <span className="font-semibold text-slate-800">tvh/{state.productId}</span> zijn veilig opgeslagen.
+              Het wit maken loopt nu automatisch op de achtergrond.
+            </p>
             <button
               onClick={() => {
                 setState({ ...state, step: 'input', productId: '', productName: '', description: '', images: [] });

@@ -10,37 +10,35 @@ import { AppState, UploadedFile } from '../types';
 import { LogOut, Package } from 'lucide-react';
 
 export default function Home() {
-  // Laad initialState direct uit localStorage als beschikbaar
-const getInitialState = (): AppState => {
-  if (typeof window === 'undefined') {
-    return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
-  }
-  try {
-    const raw = window.localStorage.getItem('hefonderdelen-app-state');
-    if (raw) {
-      const saved = JSON.parse(raw) as Partial<AppState>;
-      const safeStep = saved.step === 'input' ? 'input' : 'auth';
-
-      window.localStorage.setItem(
-        'hefonderdelen-app-state',
-        JSON.stringify({ step: safeStep, productId: safeStep === 'input' ? (saved.productId || '') : '', productName: '', description: '' })
-      );
-
-      return {
-        step: safeStep,
-        productId: safeStep === 'input' ? (saved.productId || '') : '',
-        productName: '',
-        description: '',
-        images: [],
-        user: null,
-      };
+  const getInitialState = (): AppState => {
+    if (typeof window === 'undefined') {
+      return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
     }
-  } catch {
-    // negeer corrupte storage
-  }
-  return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
-};
+    try {
+      const raw = window.localStorage.getItem('hefonderdelen-app-state');
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<AppState>;
+        const safeStep = saved.step === 'input' ? 'input' : 'auth';
 
+        window.localStorage.setItem(
+          'hefonderdelen-app-state',
+          JSON.stringify({ step: safeStep, productId: safeStep === 'input' ? (saved.productId || '') : '', productName: '', description: '' })
+        );
+
+        return {
+          step: safeStep,
+          productId: safeStep === 'input' ? (saved.productId || '') : '',
+          productName: '',
+          description: '',
+          images: [],
+          user: null,
+        };
+      }
+    } catch {
+      // negeer corrupte storage
+    }
+    return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
+  };
 
   const [state, setState] = useState<AppState>(getInitialState());
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
@@ -69,22 +67,29 @@ const getInitialState = (): AppState => {
     triggerQueue();
   }, [state.user?.id]);
 
-  // Sla relevante staat op zodat we na reload terugkeren naar dezelfde pagina
+  // Sla relevante staat op — alleen 'input' stap, nooit 'details' of 'success'
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const { step, productId, productName, description } = state;
+    const { step, productId } = state;
+
+    const stepToSave = step === 'input' ? 'input' : 'auth';
+    const productIdToSave = step === 'input' ? productId : '';
+
     window.localStorage.setItem(
       'hefonderdelen-app-state',
-      JSON.stringify({ step, productId, productName, description })
+      JSON.stringify({
+        step: stepToSave,
+        productId: productIdToSave,
+        productName: '',
+        description: ''
+      })
     );
-  }, [state.step, state.productId, state.productName, state.description]);
+  }, [state.step, state.productId]);
 
   useEffect(() => {
-    // Check of Supabase geconfigureerd is
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    
+
     if (typeof window !== 'undefined' && supabaseUrl && supabaseUrl !== '' && supabaseUrl !== 'https://placeholder.supabase.co' && !supabaseUrl.includes('placeholder')) {
-      // Detecteer Supabase invite links (type=invite) – ondersteunt token, token_hash en hash-params
       const searchParams = new URLSearchParams(window.location.search);
       const hashString = window.location.hash.startsWith('#')
         ? window.location.hash.slice(1)
@@ -104,38 +109,30 @@ const getInitialState = (): AppState => {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
           const user = session.user;
-          const isRecentUser = user.created_at && 
+          const isRecentUser = user.created_at &&
             (new Date().getTime() - new Date(user.created_at).getTime()) < 5 * 60 * 1000;
-          
-          const isInvited = hasInviteToken || 
-                           user.app_metadata?.invited_at || 
-                           user.user_metadata?.invited === true ||
-                           (isRecentUser && !user.user_metadata?.password_set);
-          
+
+          const isInvited = hasInviteToken ||
+            user.app_metadata?.invited_at ||
+            user.user_metadata?.invited === true ||
+            (isRecentUser && !user.user_metadata?.password_set);
+
           if (isInvited) {
             setNeedsPasswordSetup(true);
             setState(prev => ({ ...prev, user: session.user, step: 'password-setup' }));
             window.history.replaceState({}, document.title, window.location.pathname);
           } else {
-            // Behoud huidige stap als we al midden in een flow zitten (details/success)
-            // Alleen overschrijf naar 'input' als we op auth/password-setup staan
             setState(prev => {
-              // Als we al op details of success staan, behoud die stap
               if (prev.step === 'details' || prev.step === 'success' || prev.step === 'input') {
                 return { ...prev, user: session.user };
               }
-              // Anders: als we op auth/password-setup staan, ga naar input
               const nextStep = (prev.step === 'auth' || prev.step === 'password-setup') ? 'input' : prev.step;
               return { ...prev, user: session.user, step: nextStep };
             });
           }
         } else {
-          // Geen sessie: als we op details/success staan, behoud de stap maar zonder user
-          // Dit zorgt ervoor dat de pagina niet opeens terug springt naar auth
           setState(prev => {
             if (prev.step === 'details' || prev.step === 'success') {
-              // Blijf op details/success, maar markeer dat er geen user is
-              // De gebruiker kan dan nog steeds zien waar hij was
               return prev;
             }
             return { ...prev, user: null, step: 'auth' };
@@ -143,46 +140,35 @@ const getInitialState = (): AppState => {
         }
       }).catch((err) => {
         console.error('Supabase session check failed:', err);
-        // Blijf op auth scherm als Supabase faalt
         setState(prev => ({ ...prev, user: null, step: 'auth' }));
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           const user = session.user;
-          
-          // Check of dit een invite is: 
-          // 1. URL heeft invite parameters
-          // 2. User heeft invite metadata
-          // 3. User is recent aangemaakt (binnen laatste 5 minuten) - workaround voor invite detection
-          const isRecentUser = user.created_at && 
-            (new Date().getTime() - new Date(user.created_at).getTime()) < 5 * 60 * 1000;
-          
-          const isInvited = hasInviteToken || 
-                           user.app_metadata?.invited_at || 
-                           user.user_metadata?.invited === true ||
-                           (isRecentUser && !user.user_metadata?.password_set);
 
-          // Als de gebruiker een invite heeft en nog geen wachtwoord heeft gezet,
-          // forceer dan ALTIJD de password-setup, ongeacht het event type.
+          const isRecentUser = user.created_at &&
+            (new Date().getTime() - new Date(user.created_at).getTime()) < 5 * 60 * 1000;
+
+          const isInvited = hasInviteToken ||
+            user.app_metadata?.invited_at ||
+            user.user_metadata?.invited === true ||
+            (isRecentUser && !user.user_metadata?.password_set);
+
           if (isInvited && !user.user_metadata?.password_set) {
             setNeedsPasswordSetup(true);
             setState(prev => ({ ...prev, user: session.user, step: 'password-setup' }));
             if (_event === 'SIGNED_IN') {
-              // Clear URL parameters alleen bij eerste sign-in
               window.history.replaceState({}, document.title, window.location.pathname);
             }
             return;
           }
 
-          // Geen invite meer of wachtwoord al ingesteld -> normale flow
           setNeedsPasswordSetup(false);
           setState(prev => {
-            // Behoud huidige stap als we al midden in een flow zitten
             if (prev.step === 'details' || prev.step === 'success') {
               return { ...prev, user: session.user };
             }
-            // Alleen naar 'input' gaan als we op auth/password-setup staan
             const nextStep = (prev.step === 'auth' || prev.step === 'password-setup') ? 'input' : prev.step;
             return { ...prev, user: session.user, step: nextStep };
           });
@@ -194,7 +180,6 @@ const getInitialState = (): AppState => {
 
       return () => subscription.unsubscribe();
     } else {
-      // Supabase niet geconfigureerd - blijf op auth scherm
       console.warn('Supabase niet geconfigureerd. Configureer NEXT_PUBLIC_SUPABASE_URL en NEXT_PUBLIC_SUPABASE_ANON_KEY in je .env bestand.');
       setState(prev => ({ ...prev, user: null, step: 'auth' }));
     }
@@ -203,7 +188,6 @@ const getInitialState = (): AppState => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setState({ step: 'auth', productId: '', productName: '', description: '', images: [], user: null });
-    // Clear localStorage bij logout
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('hefonderdelen-app-state');
     }
@@ -219,7 +203,7 @@ const getInitialState = (): AppState => {
       </div>
       <div className="flex items-center gap-4">
         <span className="text-sm text-slate-500 hidden sm:inline">{state.user?.email}</span>
-        <button 
+        <button
           onClick={handleLogout}
           className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors"
           title="Uitloggen"
@@ -233,32 +217,32 @@ const getInitialState = (): AppState => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {state.step !== 'auth' && state.step !== 'password-setup' && renderHeader()}
-      
+
       <main className="flex-1 flex items-center justify-center p-4">
         {state.step === 'auth' && (
           <Auth onLogin={(user) => setState(prev => ({ ...prev, user, step: 'input' }))} />
         )}
 
         {state.step === 'password-setup' && state.user && (
-          <PasswordSetup 
-            user={state.user} 
+          <PasswordSetup
+            user={state.user}
             onComplete={() => {
               setNeedsPasswordSetup(false);
               setState(prev => ({ ...prev, step: 'input' }));
-            }} 
+            }}
           />
         )}
 
         {state.step === 'input' && (
-          <ProductStep 
-            value={state.productId} 
+          <ProductStep
+            value={state.productId}
             onChange={(val) => setState(prev => ({ ...prev, productId: val }))}
             onNext={() => setState(prev => ({ ...prev, step: 'details' }))}
           />
         )}
 
         {state.step === 'details' && (
-          <UploadStep 
+          <UploadStep
             productId={state.productId}
             productName={state.productName}
             onProductNameChange={(val) => setState(prev => ({ ...prev, productName: val }))}
@@ -285,13 +269,6 @@ const getInitialState = (): AppState => {
             <button
               onClick={() => {
                 setState({ ...state, step: 'input', productId: '', productName: '', description: '', images: [] });
-                // Update localStorage voor nieuwe flow
-                if (typeof window !== 'undefined') {
-                  window.localStorage.setItem(
-                    'hefonderdelen-app-state',
-                    JSON.stringify({ step: 'input', productId: '', productName: '', description: '' })
-                  );
-                }
               }}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition-all"
             >

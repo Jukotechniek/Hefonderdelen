@@ -39,10 +39,9 @@ function getSafeOriginalExtension(file: File) {
 async function upsertProduct(
   productId: string,
   productName: string,
-  description: string,
-  authHeader: string | null
+  description: string
 ) {
-  const supabase = createServerSupabaseClient({ authHeader });
+  const supabase = createServerSupabaseClient({ requireServiceRole: true });
   const articleNumber = `TVH/${productId}`;
   const productNameToSave = productName.trim() ? productName.trim() : `TVH ${productId}`;
 
@@ -66,7 +65,6 @@ async function upsertProduct(
 export async function POST(req: NextRequest) {
   const uploadedOriginalPaths: string[] = [];
   let batchId: string | null = null;
-  const authHeader = req.headers.get('authorization');
 
   try {
     const formData = await req.formData();
@@ -83,10 +81,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Geen afbeeldingen ontvangen' }, { status: 400 });
     }
 
-    const supabase = createServerSupabaseClient({ authHeader });
+    const supabase = createServerSupabaseClient({ requireServiceRole: true });
     const articleNumber = `TVH/${productId}`;
 
-    await upsertProduct(productId, productName, description, authHeader);
+    await upsertProduct(productId, productName, description);
 
     batchId = randomUUID();
     const reservePayload = files.map((file, index) => ({
@@ -142,7 +140,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    kickPhotoProcessingQueue(authHeader).catch((error) => {
+    kickPhotoProcessingQueue().catch((error) => {
       console.error('Queue runner kon niet worden gestart:', error);
     });
 
@@ -160,7 +158,7 @@ export async function POST(req: NextRequest) {
 
     if (batchId) {
       try {
-        const supabase = createServerSupabaseClient({ authHeader });
+        const supabase = createServerSupabaseClient({ requireServiceRole: true });
 
         if (uploadedOriginalPaths.length > 0) {
           const { error: removeError } = await supabase.storage

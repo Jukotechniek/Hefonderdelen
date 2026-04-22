@@ -60,8 +60,8 @@ function getProcessedStoragePath(productId: string, sequenceNumber: number) {
   return `${folderPrefix}tvh-${productId}-${sequenceNumber}.jpg`;
 }
 
-async function claimNextPhotoProcessingJob(authHeader?: string | null) {
-  const supabase = createServerSupabaseClient({ authHeader });
+async function claimNextPhotoProcessingJob() {
+  const supabase = createServerSupabaseClient({ requireServiceRole: true });
   const { data, error } = await supabase.rpc('claim_next_photo_processing_job');
 
   if (error) {
@@ -75,8 +75,8 @@ async function claimNextPhotoProcessingJob(authHeader?: string | null) {
   return data[0] as PhotoProcessingJob;
 }
 
-async function markPhotoProcessingJobFailed(jobId: string, errorMessage: string, authHeader?: string | null) {
-  const supabase = createServerSupabaseClient({ authHeader });
+async function markPhotoProcessingJobFailed(jobId: string, errorMessage: string) {
+  const supabase = createServerSupabaseClient({ requireServiceRole: true });
   const { error } = await supabase
     .from('photo_processing_jobs')
     .update({
@@ -93,10 +93,9 @@ async function markPhotoProcessingJobFailed(jobId: string, errorMessage: string,
 
 async function markPhotoProcessingJobProcessed(
   jobId: string,
-  processedStoragePath: string,
-  authHeader?: string | null
+  processedStoragePath: string
 ) {
-  const supabase = createServerSupabaseClient({ authHeader });
+  const supabase = createServerSupabaseClient({ requireServiceRole: true });
   const { error } = await supabase
     .from('photo_processing_jobs')
     .update({
@@ -112,17 +111,16 @@ async function markPhotoProcessingJobProcessed(
   }
 }
 
-async function processPhotoJob(job: PhotoProcessingJob, authHeader?: string | null) {
+async function processPhotoJob(job: PhotoProcessingJob) {
   if (!job.original_storage_path) {
     await markPhotoProcessingJobFailed(
       job.id,
-      'Originele opslaglocatie ontbreekt voor deze fotojob.',
-      authHeader
+      'Originele opslaglocatie ontbreekt voor deze fotojob.'
     );
     return;
   }
 
-  const supabase = createServerSupabaseClient({ authHeader });
+  const supabase = createServerSupabaseClient({ requireServiceRole: true });
   const { data: originalFile, error: downloadError } = await supabase.storage
     .from(PHOTO_BUCKET)
     .download(job.original_storage_path);
@@ -130,8 +128,7 @@ async function processPhotoJob(job: PhotoProcessingJob, authHeader?: string | nu
   if (downloadError || !originalFile) {
     await markPhotoProcessingJobFailed(
       job.id,
-      `Originele foto kon niet worden gedownload: ${downloadError?.message || 'onbekende fout'}`,
-      authHeader
+      `Originele foto kon niet worden gedownload: ${downloadError?.message || 'onbekende fout'}`
     );
     return;
   }
@@ -164,7 +161,7 @@ async function processPhotoJob(job: PhotoProcessingJob, authHeader?: string | nu
     }
 
     if (processingError) {
-      await markPhotoProcessingJobFailed(job.id, processingError, authHeader);
+      await markPhotoProcessingJobFailed(job.id, processingError);
       return;
     }
 
@@ -183,18 +180,16 @@ async function processPhotoJob(job: PhotoProcessingJob, authHeader?: string | nu
     if (uploadError) {
       await markPhotoProcessingJobFailed(
         job.id,
-        `Verwerkte foto kon niet worden opgeslagen: ${uploadError.message}`,
-        authHeader
+        `Verwerkte foto kon niet worden opgeslagen: ${uploadError.message}`
       );
       return;
     }
 
-    await markPhotoProcessingJobProcessed(job.id, processedStoragePath, authHeader);
+    await markPhotoProcessingJobProcessed(job.id, processedStoragePath);
   } catch (error: any) {
     await markPhotoProcessingJobFailed(
       job.id,
-      error?.message || 'Onbekende fout tijdens verwerken.',
-      authHeader
+      error?.message || 'Onbekende fout tijdens verwerken.'
     );
   } finally {
     if (tmpDir) {
@@ -211,21 +206,21 @@ async function processPhotoJob(job: PhotoProcessingJob, authHeader?: string | nu
   }
 }
 
-async function drainPhotoProcessingQueue(authHeader?: string | null) {
+async function drainPhotoProcessingQueue() {
   while (true) {
-    const nextJob = await claimNextPhotoProcessingJob(authHeader);
+    const nextJob = await claimNextPhotoProcessingJob();
 
     if (!nextJob) {
       return;
     }
 
-    await processPhotoJob(nextJob, authHeader);
+    await processPhotoJob(nextJob);
   }
 }
 
-export function kickPhotoProcessingQueue(authHeader?: string | null) {
+export function kickPhotoProcessingQueue() {
   if (!queueDrainPromise) {
-    queueDrainPromise = drainPhotoProcessingQueue(authHeader).finally(() => {
+    queueDrainPromise = drainPhotoProcessingQueue().finally(() => {
       queueDrainPromise = null;
     });
   }

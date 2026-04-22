@@ -1,13 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { kickPhotoProcessingQueue } from '../../../../lib/photo-processing-queue';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
-    const authHeader = req.headers.get('authorization');
-
-    kickPhotoProcessingQueue(authHeader).catch((error) => {
+    kickPhotoProcessingQueue().catch((error) => {
       console.error('Queue runner kon niet worden gestart via process-queue route:', error);
     });
 

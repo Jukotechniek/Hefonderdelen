@@ -11,29 +11,36 @@ import { LogOut, Package } from 'lucide-react';
 
 export default function Home() {
   // Laad initialState direct uit localStorage als beschikbaar
-  const getInitialState = (): AppState => {
-    if (typeof window === 'undefined') {
-      return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
-    }
-    try {
-      const raw = window.localStorage.getItem('hefonderdelen-app-state');
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<AppState>;
-        // Alleen step, productId, productName en description uit localStorage, images/user altijd leeg/null
-        return {
-          step: (saved.step && saved.step !== 'auth' && saved.step !== 'password-setup') ? saved.step : 'auth',
-          productId: saved.productId || '',
-          productName: saved.productName || '',
-          description: saved.description || '',
-          images: [],
-          user: null,
-        };
-      }
-    } catch {
-      // negeer corrupte storage
-    }
+const getInitialState = (): AppState => {
+  if (typeof window === 'undefined') {
     return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
-  };
+  }
+  try {
+    const raw = window.localStorage.getItem('hefonderdelen-app-state');
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<AppState>;
+      const safeStep = saved.step === 'input' ? 'input' : 'auth';
+
+      window.localStorage.setItem(
+        'hefonderdelen-app-state',
+        JSON.stringify({ step: safeStep, productId: safeStep === 'input' ? (saved.productId || '') : '', productName: '', description: '' })
+      );
+
+      return {
+        step: safeStep,
+        productId: safeStep === 'input' ? (saved.productId || '') : '',
+        productName: '',
+        description: '',
+        images: [],
+        user: null,
+      };
+    }
+  } catch {
+    // negeer corrupte storage
+  }
+  return { step: 'auth', productId: '', productName: '', description: '', images: [], user: null };
+};
+
 
   const [state, setState] = useState<AppState>(getInitialState());
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
